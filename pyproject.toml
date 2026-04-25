@@ -9,6 +9,7 @@ description = "A Python foundation for QuantForge."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "pandas",
     "typer",
 ]
 
