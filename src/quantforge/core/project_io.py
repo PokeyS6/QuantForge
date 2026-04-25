@@ -29,3 +29,13 @@ def write_project(project_path: Path, project: StrategyProject) -> None:
         json.dumps(baseline_variant.to_dict(), indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def read_project(project_metadata_file: Path) -> dict:
+    """Read project metadata from strategy.qf.json."""
+    return json.loads(project_metadata_file.read_text(encoding="utf-8"))
+
+
+def project_dir_from_metadata(project_metadata_file: Path) -> Path:
+    """Return the project directory for a strategy metadata file."""
+    return project_metadata_file.parent

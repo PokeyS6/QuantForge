@@ -6,7 +6,7 @@ import typer
 
 from quantforge.core.models import new_rsi_project
 from quantforge.core.paths import project_dir
-from quantforge.core.project_io import write_project
+from quantforge.core.project_io import read_project, write_project
 
 app = typer.Typer(
     help=(
@@ -45,9 +45,21 @@ def create(
 
 
 @app.command()
-def analyze() -> None:
-    """Analyze a placeholder baseline."""
-    typer.echo(f"Analyze placeholder. {NON_ADVISORY_NOTE}")
+def analyze(project_file: Path = typer.Argument(..., help="Path to strategy.qf.json.")) -> None:
+    """Read project metadata and print a placeholder analysis."""
+    project = read_project(project_file)
+    data_window = project.get("data_window", {})
+
+    typer.echo("QuantForge placeholder analysis")
+    typer.echo(f"strategy_id: {project.get('strategy_id')}")
+    typer.echo(f"name: {project.get('name')}")
+    typer.echo(f"asset_universe: {', '.join(project.get('asset_universe', []))}")
+    typer.echo(f"timeframe: {project.get('timeframe')}")
+    typer.echo(f"data_window.start: {data_window.get('start')}")
+    typer.echo(f"data_window.end: {data_window.get('end')}")
+    typer.echo(f"baseline_variant_id: {project.get('baseline_variant_id')}")
+    typer.echo(f"variants: {len(project.get('variants', []))}")
+    typer.echo(NON_ADVISORY_NOTE)
 
 
 @app.command()
