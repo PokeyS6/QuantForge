@@ -36,6 +36,15 @@ def read_project(project_metadata_file: Path) -> dict:
     return json.loads(project_metadata_file.read_text(encoding="utf-8"))
 
 
+def get_baseline_variant(project: dict) -> dict:
+    """Return the baseline variant from project metadata."""
+    baseline_variant_id = project.get("baseline_variant_id")
+    for variant in project.get("variants", []):
+        if variant.get("variant_id") == baseline_variant_id:
+            return variant
+    raise ValueError(f"Missing baseline variant: {baseline_variant_id}")
+
+
 def project_dir_from_metadata(project_metadata_file: Path) -> Path:
     """Return the project directory for a strategy metadata file."""
     return project_metadata_file.parent

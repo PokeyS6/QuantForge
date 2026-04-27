@@ -1,9 +1,11 @@
 """Command-line interface for QuantForge."""
 
 from pathlib import Path
+from typing import Optional
 
 import typer
 
+from quantforge.backtest.engine import run_baseline_rsi_analysis
 from quantforge.core.models import new_rsi_project
 from quantforge.core.paths import project_dir
 from quantforge.core.project_io import read_project, write_project
@@ -45,10 +47,31 @@ def create(
 
 
 @app.command()
-def analyze(project_file: Path = typer.Argument(..., help="Path to strategy.qf.json.")) -> None:
+def analyze(
+    project_file: Path = typer.Argument(..., help="Path to strategy.qf.json."),
+    data_csv: Optional[Path] = typer.Option(
+        None,
+        "--data-csv",
+        help="Optional local OHLCV CSV for baseline RSI analysis.",
+    ),
+) -> None:
     """Read project metadata and print a placeholder analysis."""
     project = read_project(project_file)
     data_window = project.get("data_window", {})
+
+    if data_csv is not None:
+        summary = run_baseline_rsi_analysis(project, data_csv)
+
+        typer.echo("QuantForge baseline analysis")
+        typer.echo(f"strategy_id: {summary['strategy_id']}")
+        typer.echo(f"ticker: {summary['ticker']}")
+        typer.echo(f"strategy_type: {summary['strategy_type']}")
+        typer.echo(f"total_return: {summary['total_return']:.6f}")
+        typer.echo(f"max_drawdown: {summary['max_drawdown']:.6f}")
+        typer.echo(f"exposure: {summary['exposure']:.6f}")
+        typer.echo(f"trade_count: {summary['trade_count']}")
+        typer.echo(NON_ADVISORY_NOTE)
+        return
 
     typer.echo("QuantForge placeholder analysis")
     typer.echo(f"strategy_id: {project.get('strategy_id')}")
