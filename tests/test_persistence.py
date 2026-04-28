@@ -146,8 +146,20 @@ def test_run_and_persist_baseline_analysis_writes_required_markdown_report(
     assert "## Strategy Code" in report
     assert "## Assumptions" in report
     assert "## Metrics" in report
+    assert "## Regime Analysis (Volatility)" in report
+    assert "### Regime Metrics" in report
+    assert "### Observation" in report
     assert "## Diagnostics" in report
     assert "## Interpretation (Non-Advisory)" in report
+    assert report.index("## Metrics") < report.index("## Regime Analysis (Volatility)")
+    assert report.index("## Regime Analysis (Volatility)") < report.index("## Diagnostics")
+    assert "| Regime | Avg Daily Return | Exposure | Trade Count |" in report
+    assert "| High Volatility |" in report
+    assert "| Normal Volatility |" in report
+    assert (
+        "The high-volatility subset contains too few trades for meaningful comparison."
+        in report
+    )
     assert "- Low trade count:" in report
     assert "- High drawdown:" in report
     assert "- Slippage not modeled: Slippage is not modeled; results may be optimistic" in report
@@ -155,3 +167,10 @@ def test_run_and_persist_baseline_analysis_writes_required_markdown_report(
     assert "- Ticker: AAPL" in report
     assert "- Period: 2020-01-01 → 2020-01-18" in report
     assert "This analysis does not constitute financial advice." in report
+
+    report_files = {path.name for path in (project_file.parent / "reports").iterdir()}
+    baseline_files = {
+        path.name for path in (project_file.parent / "variants" / "baseline").iterdir()
+    }
+    assert report_files == {"baseline_metrics.json", "baseline_report.md"}
+    assert baseline_files == {"backtest_results.csv", "signals.csv"}

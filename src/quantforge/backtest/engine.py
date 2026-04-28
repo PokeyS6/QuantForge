@@ -23,6 +23,7 @@ def _baseline_report_markdown(
     first_date,
     last_date,
     metrics: dict,
+    regime_analysis: dict,
 ) -> str:
     low_trade_count = (
         "Trade count is below 50; results may be less reliable"
@@ -34,6 +35,9 @@ def _baseline_report_markdown(
         if metrics["max_drawdown"] < -0.3
         else "not triggered"
     )
+    high_volatility = regime_analysis["high_volatility"]
+    normal_volatility = regime_analysis["normal_volatility"]
+    observation = _regime_observation(regime_analysis)
     return "\n".join(
         [
             "# Strategy Report — Baseline",
@@ -61,6 +65,32 @@ def _baseline_report_markdown(
             f"- Trade Count: {metrics['trade_count']}",
             f"- Win Rate: {metrics['win_rate']:.6f}",
             "",
+            "## Regime Analysis (Volatility)",
+            "",
+            "Volatility is measured as the 30-day rolling standard deviation of daily returns.",
+            "Rows without enough lookback history are excluded from this analysis.",
+            "",
+            f"- High-volatility threshold: {regime_analysis['threshold']:.6f}",
+            f"- High-volatility rows: {high_volatility['sample_count']}",
+            f"- Normal-volatility rows: {normal_volatility['sample_count']}",
+            "",
+            "### Regime Metrics",
+            "",
+            "| Regime | Avg Daily Return | Exposure | Trade Count |",
+            "|--------|-----------------|----------|-------------|",
+            "| High Volatility | "
+            f"{high_volatility['avg_daily_return']:.6f} | "
+            f"{high_volatility['exposure']:.6f} | "
+            f"{high_volatility['trade_count']} |",
+            "| Normal Volatility | "
+            f"{normal_volatility['avg_daily_return']:.6f} | "
+            f"{normal_volatility['exposure']:.6f} | "
+            f"{normal_volatility['trade_count']} |",
+            "",
+            "### Observation",
+            "",
+            observation,
+            "",
             "## Diagnostics",
             f"- Low trade count: {low_trade_count}",
             f"- High drawdown: {high_drawdown}",
@@ -72,6 +102,42 @@ def _baseline_report_markdown(
             "Performance may not generalize to future market conditions.",
             "This analysis does not constitute financial advice.",
             "",
+        ]
+    )
+
+
+def _comparison_label(left: float, right: float, tolerance: float = 1e-6) -> str:
+    if abs(left - right) <= tolerance:
+        return "similar"
+    if left > right:
+        return "higher"
+    return "lower"
+
+
+def _regime_observation(regime_analysis: dict) -> str:
+    if regime_analysis["too_few_high_vol_trades"]:
+        return "The high-volatility subset contains too few trades for meaningful comparison."
+
+    high_volatility = regime_analysis["high_volatility"]
+    normal_volatility = regime_analysis["normal_volatility"]
+    return_comparison = _comparison_label(
+        high_volatility["avg_daily_return"],
+        normal_volatility["avg_daily_return"],
+    )
+    exposure_comparison = _comparison_label(
+        high_volatility["exposure"],
+        normal_volatility["exposure"],
+    )
+    return "\n".join(
+        [
+            "The strategy’s return profile differed between volatility regimes.",
+            "",
+            "In high-volatility periods, average daily return was "
+            f"{return_comparison} and exposure was {exposure_comparison} "
+            "compared with normal-volatility periods.",
+            "",
+            "Caution: The high-volatility subset may be small and may not represent future market conditions.",
+            "This analysis does not predict future performance.",
         ]
     )
 
@@ -187,6 +253,7 @@ def run_and_persist_baseline_analysis(project: dict, data_csv: Path, project_fil
     positions = build_long_positions(signals)
     results = run_long_backtest(prices, positions)
     summary = summarize_backtest(results)
+    regime_analysis = compute_volatility_regime_analysis(results)
     metrics = {
         "total_return": summary["total_return"],
         "annualized_return": summary["annualized_return"],
@@ -213,6 +280,7 @@ def run_and_persist_baseline_analysis(project: dict, data_csv: Path, project_fil
         first_date=results.index[0],
         last_date=results.index[-1],
         metrics=metrics,
+        regime_analysis=regime_analysis,
     )
     report_path.write_text(report, encoding="utf-8")
 
