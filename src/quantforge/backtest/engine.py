@@ -100,6 +100,36 @@ def run_long_backtest(
     return results
 
 
+def _regime_summary(regime: pd.DataFrame) -> dict:
+    position = regime["position"]
+    trade_count = (position.eq(1) & position.shift(1, fill_value=0).eq(0)).sum()
+    return {
+        "sample_count": int(len(regime)),
+        "avg_daily_return": float(regime["strategy_return"].mean()),
+        "trade_count": int(trade_count),
+        "exposure": float(position.mean()),
+    }
+
+
+def compute_volatility_regime_analysis(results: pd.DataFrame) -> dict:
+    """Compute basic strategy behavior by volatility regime."""
+    returns = results["close"].pct_change()
+    volatility = returns.rolling(30).std().dropna()
+    threshold = volatility.quantile(0.75)
+    regime_results = results.loc[volatility.index]
+    high_vol = volatility > threshold
+    normal_vol = volatility <= threshold
+    high_volatility = _regime_summary(regime_results.loc[high_vol])
+    normal_volatility = _regime_summary(regime_results.loc[normal_vol])
+
+    return {
+        "threshold": float(threshold),
+        "high_volatility": high_volatility,
+        "normal_volatility": normal_volatility,
+        "too_few_high_vol_trades": high_volatility["trade_count"] < 5,
+    }
+
+
 def run_baseline_rsi_analysis(project: dict, data_csv: Path) -> dict:
     """Run baseline RSI analysis from project metadata and a local CSV."""
     baseline = get_baseline_variant(project)
