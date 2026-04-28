@@ -5,10 +5,10 @@ from typing import Optional
 
 import typer
 
-from quantforge.backtest.engine import run_baseline_rsi_analysis
+from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.models import new_rsi_project
 from quantforge.core.paths import project_dir
-from quantforge.core.project_io import read_project, write_project
+from quantforge.core.project_io import get_baseline_variant, read_project, write_project
 
 app = typer.Typer(
     help=(
@@ -60,12 +60,18 @@ def analyze(
     data_window = project.get("data_window", {})
 
     if data_csv is not None:
-        summary = run_baseline_rsi_analysis(project, data_csv)
+        try:
+            summary = run_and_persist_baseline_analysis(project, data_csv, project_file)
+        except ValueError as error:
+            typer.echo(str(error))
+            raise typer.Exit(code=1) from error
+        baseline = get_baseline_variant(project)
+        parameters = baseline.get("parameters", {})
 
         typer.echo("QuantForge baseline analysis")
-        typer.echo(f"strategy_id: {summary['strategy_id']}")
-        typer.echo(f"ticker: {summary['ticker']}")
-        typer.echo(f"strategy_type: {summary['strategy_type']}")
+        typer.echo(f"strategy_id: {project.get('strategy_id')}")
+        typer.echo(f"ticker: {parameters.get('ticker')}")
+        typer.echo(f"strategy_type: {baseline.get('strategy_type')}")
         typer.echo(f"total_return: {summary['total_return']:.6f}")
         typer.echo(f"max_drawdown: {summary['max_drawdown']:.6f}")
         typer.echo(f"exposure: {summary['exposure']:.6f}")
