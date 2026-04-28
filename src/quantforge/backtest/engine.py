@@ -12,6 +12,70 @@ from quantforge.data.csv_loader import load_ohlcv_csv
 from quantforge.strategies.rsi import generate_rsi_signals
 
 
+def _format_report_date(value) -> str:
+    if hasattr(value, "date"):
+        return value.date().isoformat()
+    return str(value)
+
+
+def _baseline_report_markdown(
+    ticker: str,
+    first_date,
+    last_date,
+    metrics: dict,
+) -> str:
+    low_trade_count = (
+        "Trade count is below 50; results may be less reliable"
+        if metrics["trade_count"] < 50
+        else "not triggered"
+    )
+    high_drawdown = (
+        "Max drawdown is below -30%; review downside risk"
+        if metrics["max_drawdown"] < -0.3
+        else "not triggered"
+    )
+    return "\n".join(
+        [
+            "# Strategy Report — Baseline",
+            "",
+            "## Strategy Summary",
+            "- Strategy: RSI Reversal",
+            f"- Ticker: {ticker}",
+            f"- Period: {_format_report_date(first_date)} → {_format_report_date(last_date)}",
+            "",
+            "## Strategy Code",
+            "The baseline strategy logic is implemented in the QuantForge analysis pipeline.",
+            "Current implementation: RSI-based entry/exit logic using Wilder RSI.",
+            "",
+            "## Assumptions",
+            "- Long-only",
+            "- Assumed slippage: 0.05% per trade (not applied in backtest)",
+            "- No transaction costs modeled",
+            "- Uses daily OHLCV data",
+            "",
+            "## Metrics",
+            f"- Total Return: {metrics['total_return']:.6f}",
+            f"- Annualized Return: {metrics['annualized_return']:.6f}",
+            f"- Max Drawdown: {metrics['max_drawdown']:.6f}",
+            f"- Exposure: {metrics['exposure']:.6f}",
+            f"- Trade Count: {metrics['trade_count']}",
+            f"- Win Rate: {metrics['win_rate']:.6f}",
+            "",
+            "## Diagnostics",
+            f"- Low trade count: {low_trade_count}",
+            f"- High drawdown: {high_drawdown}",
+            "- Slippage not modeled: Slippage is not modeled; results may be optimistic",
+            "- Data source: user-provided CSV",
+            "",
+            "## Interpretation (Non-Advisory)",
+            "This strategy was evaluated on historical data only.",
+            "Performance may not generalize to future market conditions.",
+            "This analysis does not constitute financial advice.",
+            "",
+        ]
+    )
+
+
 def run_long_backtest(
     prices: pd.DataFrame,
     positions: pd.Series,
@@ -68,6 +132,7 @@ def run_and_persist_baseline_analysis(project: dict, data_csv: Path, project_fil
     reports_dir = project_root / "reports"
     variants_dir = project_root / "variants" / "baseline"
     metrics_path = reports_dir / "baseline_metrics.json"
+    report_path = reports_dir / "baseline_report.md"
     results_path = variants_dir / "backtest_results.csv"
     signals_path = variants_dir / "signals.csv"
 
@@ -112,5 +177,13 @@ def run_and_persist_baseline_analysis(project: dict, data_csv: Path, project_fil
     signals_output = signals_output[["date", "close", "rsi", "entry_signal", "exit_signal"]]
     signals_output = signals_output.sort_values("date").dropna()
     signals_output.to_csv(signals_path, index=False)
+
+    report = _baseline_report_markdown(
+        ticker=parameters.get("ticker"),
+        first_date=results.index[0],
+        last_date=results.index[-1],
+        metrics=metrics,
+    )
+    report_path.write_text(report, encoding="utf-8")
 
     return metrics

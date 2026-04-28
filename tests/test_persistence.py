@@ -77,10 +77,12 @@ def test_run_and_persist_baseline_analysis_writes_files_and_exact_metrics_schema
     run_and_persist_baseline_analysis(project, data_csv, project_file)
 
     metrics_path = project_file.parent / "reports" / "baseline_metrics.json"
+    report_path = project_file.parent / "reports" / "baseline_report.md"
     results_path = project_file.parent / "variants" / "baseline" / "backtest_results.csv"
     signals_path = project_file.parent / "variants" / "baseline" / "signals.csv"
 
     assert metrics_path.exists()
+    assert report_path.exists()
     assert results_path.exists()
     assert signals_path.exists()
     assert list(json.loads(metrics_path.read_text(encoding="utf-8"))) == [
@@ -125,3 +127,31 @@ def test_run_and_persist_baseline_analysis_csv_outputs_have_expected_columns_and
     assert list(signals.columns) == ["date", "close", "rsi", "entry_signal", "exit_signal"]
     assert not results.isna().any().any()
     assert not signals.isna().any().any()
+
+
+def test_run_and_persist_baseline_analysis_writes_required_markdown_report(
+    baseline_project,
+):
+    project_file, data_csv = baseline_project
+    project = read_project(project_file)
+
+    run_and_persist_baseline_analysis(project, data_csv, project_file)
+
+    report = (project_file.parent / "reports" / "baseline_report.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "# Strategy Report — Baseline" in report
+    assert "## Strategy Summary" in report
+    assert "## Strategy Code" in report
+    assert "## Assumptions" in report
+    assert "## Metrics" in report
+    assert "## Diagnostics" in report
+    assert "## Interpretation (Non-Advisory)" in report
+    assert "- Low trade count:" in report
+    assert "- High drawdown:" in report
+    assert "- Slippage not modeled: Slippage is not modeled; results may be optimistic" in report
+    assert "- Data source: user-provided CSV" in report
+    assert "- Ticker: AAPL" in report
+    assert "- Period: 2020-01-01 → 2020-01-18" in report
+    assert "This analysis does not constitute financial advice." in report
