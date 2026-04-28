@@ -9,6 +9,7 @@ from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.models import new_rsi_project
 from quantforge.core.paths import project_dir
 from quantforge.core.project_io import get_baseline_variant, read_project, write_project
+from quantforge.variants.mutations import create_volatility_filter_variant
 
 app = typer.Typer(
     help=(
@@ -92,9 +93,21 @@ def analyze(
 
 
 @app.command()
-def modify() -> None:
-    """Modify a placeholder strategy hypothesis."""
-    typer.echo(f"Modify placeholder. {NON_ADVISORY_NOTE}")
+def modify(
+    project_file: Path = typer.Argument(..., help="Path to strategy.qf.json."),
+    user_instruction: str = typer.Argument(..., help="User-provided modification request."),
+) -> None:
+    """Create a placeholder strategy variant."""
+    try:
+        create_volatility_filter_variant(project_file, user_instruction)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+    typer.echo("Variant 'variant_001_volatility_filter' created.")
+    typer.echo("")
+    typer.echo("This variant has not been backtested yet.")
+    typer.echo("Variant backtesting will be available in a subsequent step.")
 
 
 @app.command()
