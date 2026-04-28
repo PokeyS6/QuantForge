@@ -5,6 +5,7 @@ import pytest
 
 from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.project_io import read_project
+from quantforge.variants.mutations import create_volatility_filter_variant
 
 
 def _write_prices_csv(path):
@@ -68,6 +69,41 @@ def baseline_project(tmp_path):
     data_csv = tmp_path / "prices.csv"
     _write_prices_csv(data_csv)
     return project_file, data_csv
+
+
+@pytest.fixture()
+def analyzed_project(tmp_path):
+    project_root = tmp_path / "aapl-rsi-reversal"
+    baseline_dir = project_root / "variants" / "baseline"
+    baseline_dir.mkdir(parents=True)
+    project_file = project_root / "strategy.qf.json"
+    project_file.write_text(
+        json.dumps(
+            {
+                "strategy_id": "rsi_reversal_aapl",
+                "baseline_variant_id": "baseline",
+                "variants": [
+                    {
+                        "variant_id": "baseline",
+                        "strategy_type": "rsi_reversal",
+                        "parameters": {
+                            "ticker": "AAPL",
+                            "entry_rsi": 30,
+                            "exit_rsi": 70,
+                            "rsi_window": 14,
+                        },
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (baseline_dir / "backtest_results.csv").write_text(
+        "date,close,position,asset_return,strategy_return,equity\n",
+        encoding="utf-8",
+    )
+    return project_file
 
 
 def test_run_and_persist_baseline_analysis_writes_files_and_exact_metrics_schema(baseline_project):
@@ -174,3 +210,120 @@ def test_run_and_persist_baseline_analysis_writes_required_markdown_report(
     }
     assert report_files == {"baseline_metrics.json", "baseline_report.md"}
     assert baseline_files == {"backtest_results.csv", "signals.csv"}
+
+
+def test_create_volatility_filter_variant_writes_expected_artifacts(analyzed_project):
+    variant_dir = create_volatility_filter_variant(
+        analyzed_project,
+        "Add a volatility filter",
+    )
+
+    strategy_config = json.loads(
+        (variant_dir / "strategy_config.json").read_text(encoding="utf-8")
+    )
+    change_summary = json.loads(
+        (variant_dir / "change_summary.json").read_text(encoding="utf-8")
+    )
+    diff = (variant_dir / "diff.md").read_text(encoding="utf-8")
+
+    assert strategy_config == {
+        "variant_id": "variant_001_volatility_filter",
+        "parent_variant_id": "baseline",
+        "modification_type": "volatility_filter",
+        "volatility_window": 30,
+        "volatility_threshold_quantile": 0.75,
+        "entry_rule": "RSI < 30 AND rolling volatility <= threshold",
+        "exit_rule": "RSI > 70",
+    }
+    assert change_summary == {
+        "variant_id": "variant_001_volatility_filter",
+        "parent_variant_id": "baseline",
+        "user_instruction": "Add a volatility filter",
+        "summary": "Adds a volatility filter that blocks RSI entries during unusually high-volatility periods.",
+        "rationale": "Phase 2 diagnostics showed strategy behavior differs under high-volatility conditions.",
+        "assumptions": [
+            "Volatility is measured as the 30-day rolling standard deviation of daily returns.",
+            "High volatility is defined as rolling volatility above the 75th percentile.",
+            "The filter affects entries only; exits remain unchanged.",
+        ],
+        "status": "created_not_backtested",
+    }
+    assert diff == """# Variant Diff — variant_001_volatility_filter
+
+Parent: baseline
+
+## Summary
+
+Adds a volatility filter to the baseline RSI entry rule.
+
+## Baseline Entry Rule
+
+Enter long when:
+
+RSI < 30
+
+## Variant Entry Rule
+
+Enter long when:
+
+RSI < 30  
+AND rolling 30-day volatility <= 75th percentile volatility threshold
+
+## Exit Rule
+
+Unchanged:
+
+RSI > 70
+
+## Implementation Note
+
+Strategy logic is currently implemented within the QuantForge analysis pipeline.
+No separate strategy code file exists at this stage.
+
+## Backtest Status
+
+This variant has been created but not backtested yet.
+"""
+
+
+def test_create_volatility_filter_variant_missing_baseline_backtest_raises(tmp_path):
+    project_root = tmp_path / "aapl-rsi-reversal"
+    project_root.mkdir()
+    project_file = project_root / "strategy.qf.json"
+    project_file.write_text('{"variants": []}\n', encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Baseline analysis not found. Run 'quantforge analyze' first.",
+    ):
+        create_volatility_filter_variant(project_file, "Add a volatility filter")
+
+
+def test_create_volatility_filter_variant_duplicate_raises(analyzed_project):
+    create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Variant variant_001_volatility_filter already exists. Refusing to overwrite.",
+    ):
+        create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+
+
+def test_create_volatility_filter_variant_unsupported_modification_raises(
+    analyzed_project,
+):
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Unsupported modification. Only 'volatility filter' is supported.",
+    ):
+        create_volatility_filter_variant(analyzed_project, "Add a moving average filter")
+
+
+def test_create_volatility_filter_variant_updates_metadata_variants_list(
+    analyzed_project,
+):
+    create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+
+    metadata = json.loads(analyzed_project.read_text(encoding="utf-8"))
+
+    assert metadata["variants"] == ["baseline", "variant_001_volatility_filter"]
