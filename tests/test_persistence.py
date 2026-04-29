@@ -5,7 +5,10 @@ import pytest
 
 from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.project_io import read_project
-from quantforge.variants.mutations import create_volatility_filter_variant
+from quantforge.variants.mutations import (
+    apply_volatility_filter_to_signals,
+    create_volatility_filter_variant,
+)
 
 
 def _write_prices_csv(path):
@@ -334,3 +337,85 @@ def test_create_volatility_filter_variant_preserves_existing_variant_ids(
         "variant_existing",
         "variant_001_volatility_filter",
     ]
+
+
+def test_apply_volatility_filter_to_signals_uses_expanding_threshold_without_lookahead():
+    index = pd.date_range("2020-01-01", periods=7)
+    prices = pd.DataFrame(
+        {"close": [100, 102, 106, 107, 160, 90, 91]},
+        index=index,
+    )
+    signals = pd.DataFrame(
+        {
+            "close": prices["close"],
+            "rsi": [20, 20, 20, 20, 20, 20, 20],
+            "entry_signal": [True, True, True, True, True, True, True],
+            "exit_signal": [False, True, False, False, True, False, False],
+        },
+        index=index,
+    )
+    volatility = prices["close"].pct_change().rolling(2).std()
+    threshold = volatility.expanding().quantile(0.5)
+    expected_entries = signals["entry_signal"] & volatility.notna() & threshold.notna() & (
+        volatility <= threshold
+    )
+
+    filtered = apply_volatility_filter_to_signals(
+        prices,
+        signals,
+        volatility_window=2,
+        volatility_threshold_quantile=0.5,
+    )
+
+    assert list(filtered.columns) == ["close", "rsi", "entry_signal", "exit_signal"]
+    assert filtered.index.equals(signals.index)
+    assert filtered["entry_signal"].tolist() == expected_entries.tolist()
+    assert filtered["exit_signal"].tolist() == signals["exit_signal"].tolist()
+    assert filtered["entry_signal"].iloc[:2].tolist() == [False, False]
+
+
+def test_apply_volatility_filter_to_signals_invalid_inputs_raise():
+    prices = pd.DataFrame({"close": [100, 101, 102]})
+    signals = pd.DataFrame(
+        {
+            "close": [100, 101, 102],
+            "rsi": [20, 21, 22],
+            "entry_signal": [True, True, True],
+            "exit_signal": [False, False, False],
+        }
+    )
+
+    with pytest.raises(ValueError, match="Prices must include a close column."):
+        apply_volatility_filter_to_signals(
+            prices.drop(columns=["close"]),
+            signals,
+            volatility_window=2,
+            volatility_threshold_quantile=0.5,
+        )
+    with pytest.raises(
+        ValueError,
+        match="Signals must include close, rsi, entry_signal, and exit_signal columns.",
+    ):
+        apply_volatility_filter_to_signals(
+            prices,
+            signals.drop(columns=["rsi"]),
+            volatility_window=2,
+            volatility_threshold_quantile=0.5,
+        )
+    with pytest.raises(ValueError, match="volatility_window must be greater than 0."):
+        apply_volatility_filter_to_signals(
+            prices,
+            signals,
+            volatility_window=0,
+            volatility_threshold_quantile=0.5,
+        )
+    with pytest.raises(
+        ValueError,
+        match="volatility_threshold_quantile must be between 0 and 1.",
+    ):
+        apply_volatility_filter_to_signals(
+            prices,
+            signals,
+            volatility_window=2,
+            volatility_threshold_quantile=1.1,
+        )

@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pandas as pd
+
 
 VARIANT_ID = "variant_001_volatility_filter"
 
@@ -66,6 +68,36 @@ No separate strategy code file exists at this stage.
 
 This variant has been created but not backtested yet.
 """
+
+
+def apply_volatility_filter_to_signals(
+    prices: pd.DataFrame,
+    signals: pd.DataFrame,
+    volatility_window: int,
+    volatility_threshold_quantile: float,
+) -> pd.DataFrame:
+    """Apply a no-lookahead volatility entry filter to RSI signals."""
+    required_signal_columns = {"close", "rsi", "entry_signal", "exit_signal"}
+    if "close" not in prices.columns:
+        raise ValueError("Prices must include a close column.")
+    missing_signal_columns = required_signal_columns - set(signals.columns)
+    if missing_signal_columns:
+        raise ValueError("Signals must include close, rsi, entry_signal, and exit_signal columns.")
+    if volatility_window <= 0:
+        raise ValueError("volatility_window must be greater than 0.")
+    if not 0 <= volatility_threshold_quantile <= 1:
+        raise ValueError("volatility_threshold_quantile must be between 0 and 1.")
+
+    returns = prices["close"].pct_change()
+    volatility = returns.rolling(volatility_window).std()
+    threshold = volatility.expanding().quantile(volatility_threshold_quantile)
+    volatility = volatility.reindex(signals.index)
+    threshold = threshold.reindex(signals.index)
+
+    entries_allowed = volatility.notna() & threshold.notna() & (volatility <= threshold)
+    filtered = signals[["close", "rsi", "entry_signal", "exit_signal"]].copy()
+    filtered["entry_signal"] = filtered["entry_signal"] & entries_allowed
+    return filtered
 
 
 def create_volatility_filter_variant(project_file: Path, user_instruction: str) -> Path:
