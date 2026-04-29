@@ -9,7 +9,10 @@ from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.models import new_rsi_project
 from quantforge.core.paths import project_dir
 from quantforge.core.project_io import get_baseline_variant, read_project, write_project
-from quantforge.variants.mutations import create_volatility_filter_variant
+from quantforge.variants.mutations import (
+    create_volatility_filter_variant,
+    run_and_persist_volatility_filter_variant_analysis,
+)
 
 app = typer.Typer(
     help=(
@@ -55,8 +58,32 @@ def analyze(
         "--data-csv",
         help="Optional local OHLCV CSV for baseline RSI analysis.",
     ),
+    variant_id: Optional[str] = typer.Option(
+        None,
+        "--variant-id",
+        help="Optional variant id to analyze.",
+    ),
 ) -> None:
     """Read project metadata and print a placeholder analysis."""
+    if variant_id is not None:
+        if data_csv is None:
+            typer.echo("ERROR: --data-csv is required when --variant-id is provided.")
+            raise typer.Exit(code=1)
+        if variant_id != "variant_001_volatility_filter":
+            typer.echo(f"ERROR: Unsupported variant id: {variant_id}")
+            raise typer.Exit(code=1)
+        try:
+            run_and_persist_volatility_filter_variant_analysis(project_file, data_csv)
+        except ValueError as error:
+            typer.echo(str(error))
+            raise typer.Exit(code=1) from error
+
+        typer.echo("Variant analysis complete: variant_001_volatility_filter")
+        typer.echo("")
+        typer.echo("This variant analysis has been saved in the variant folder.")
+        typer.echo("This is a historical backtest, not financial advice.")
+        return
+
     project = read_project(project_file)
     data_window = project.get("data_window", {})
 
