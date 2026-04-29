@@ -8,6 +8,7 @@ from quantforge.core.project_io import read_project
 from quantforge.variants.mutations import (
     apply_volatility_filter_to_signals,
     create_volatility_filter_variant,
+    run_and_persist_volatility_filter_variant_analysis,
 )
 
 
@@ -93,6 +94,22 @@ def analyzed_project(tmp_path):
     )
     (baseline_dir / "backtest_results.csv").write_text(
         "date,close,position,asset_return,strategy_return,equity\n",
+        encoding="utf-8",
+    )
+    (baseline_dir / "strategy_config.json").write_text(
+        json.dumps(
+            {
+                "variant_id": "baseline",
+                "strategy_type": "rsi_reversal",
+                "parameters": {
+                    "ticker": "AAPL",
+                    "entry_rsi": 30,
+                    "exit_rsi": 70,
+                    "rsi_window": 14,
+                },
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     return project_file
@@ -419,3 +436,123 @@ def test_apply_volatility_filter_to_signals_invalid_inputs_raise():
             volatility_window=2,
             volatility_threshold_quantile=1.1,
         )
+
+
+def test_run_and_persist_volatility_filter_variant_analysis_missing_baseline_raises(
+    tmp_path,
+):
+    project_root = tmp_path / "aapl-rsi-reversal"
+    project_root.mkdir()
+    project_file = project_root / "strategy.qf.json"
+    project_file.write_text('{"variants": ["baseline"]}\n', encoding="utf-8")
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Baseline analysis not found. Run 'quantforge analyze' first.",
+    ):
+        run_and_persist_volatility_filter_variant_analysis(project_file, data_csv)
+
+
+def test_run_and_persist_volatility_filter_variant_analysis_missing_variant_raises(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Variant variant_001_volatility_filter not found.",
+    ):
+        run_and_persist_volatility_filter_variant_analysis(analyzed_project, data_csv)
+
+
+def test_run_and_persist_volatility_filter_variant_analysis_writes_outputs(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+    create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+    project_root = analyzed_project.parent
+    baseline_results_path = project_root / "variants" / "baseline" / "backtest_results.csv"
+    baseline_config_path = project_root / "variants" / "baseline" / "strategy_config.json"
+    original_baseline_results = baseline_results_path.read_text(encoding="utf-8")
+    original_baseline_config = baseline_config_path.read_text(encoding="utf-8")
+
+    metrics = run_and_persist_volatility_filter_variant_analysis(
+        analyzed_project,
+        data_csv,
+    )
+
+    variant_dir = project_root / "variants" / "variant_001_volatility_filter"
+    results = pd.read_csv(variant_dir / "backtest_results.csv")
+    signals = pd.read_csv(variant_dir / "signals.csv")
+    metrics_json = json.loads((variant_dir / "metrics.json").read_text(encoding="utf-8"))
+    change_summary = json.loads(
+        (variant_dir / "change_summary.json").read_text(encoding="utf-8")
+    )
+    report = (variant_dir / "report.md").read_text(encoding="utf-8")
+
+    assert list(metrics_json) == [
+        "total_return",
+        "annualized_return",
+        "max_drawdown",
+        "exposure",
+        "trade_count",
+        "win_rate",
+    ]
+    assert metrics == metrics_json
+    assert list(results.columns) == [
+        "date",
+        "close",
+        "position",
+        "asset_return",
+        "strategy_return",
+        "equity",
+    ]
+    assert list(signals.columns) == ["date", "close", "rsi", "entry_signal", "exit_signal"]
+    assert not results.isna().any().any()
+    assert not signals.isna().any().any()
+    assert change_summary["status"] == "backtested"
+    assert "# Strategy Report — Variant" in report
+    assert "## Variant Summary" in report
+    assert "## Change Summary" in report
+    assert "## Strategy Code" in report
+    assert "## Assumptions" in report
+    assert "## Metrics" in report
+    assert "## Regime Analysis (Volatility)" in report
+    assert "## Diagnostics" in report
+    assert "## Interpretation (Non-Advisory)" in report
+    assert (
+        "The volatility threshold is computed using only historical data available up to each point in time."
+        in report
+    )
+    assert (
+        "The volatility filter removed all entry signals; the strategy did not take any positions."
+        in report
+    )
+    assert baseline_results_path.read_text(encoding="utf-8") == original_baseline_results
+    assert baseline_config_path.read_text(encoding="utf-8") == original_baseline_config
+
+
+def test_run_and_persist_volatility_filter_variant_analysis_refuses_overwrite(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+    create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+
+    run_and_persist_volatility_filter_variant_analysis(analyzed_project, data_csv)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "ERROR: Variant analysis already exists for variant_001_volatility_filter. "
+            "Refusing to overwrite."
+        ),
+    ):
+        run_and_persist_volatility_filter_variant_analysis(analyzed_project, data_csv)

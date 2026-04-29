@@ -5,8 +5,22 @@ from pathlib import Path
 
 import pandas as pd
 
+from quantforge.backtest.engine import compute_volatility_regime_analysis, run_long_backtest
+from quantforge.backtest.metrics import summarize_backtest
+from quantforge.backtest.trades import build_long_positions
+from quantforge.data.csv_loader import load_ohlcv_csv
+from quantforge.strategies.rsi import generate_rsi_signals
+
 
 VARIANT_ID = "variant_001_volatility_filter"
+METRIC_KEYS = [
+    "total_return",
+    "annualized_return",
+    "max_drawdown",
+    "exposure",
+    "trade_count",
+    "win_rate",
+]
 
 STRATEGY_CONFIG = {
     "variant_id": VARIANT_ID,
@@ -98,6 +112,187 @@ def apply_volatility_filter_to_signals(
     filtered = signals[["close", "rsi", "entry_signal", "exit_signal"]].copy()
     filtered["entry_signal"] = filtered["entry_signal"] & entries_allowed
     return filtered
+
+
+def _variant_report_markdown(
+    variant_config: dict,
+    metrics: dict,
+    regime_analysis: dict,
+) -> str:
+    low_trade_count = (
+        "Trade count is below 50; results may be less reliable"
+        if metrics["trade_count"] < 50
+        else "not triggered"
+    )
+    high_drawdown = (
+        "Max drawdown is below -30%; review downside risk"
+        if metrics["max_drawdown"] < -0.3
+        else "not triggered"
+    )
+    high_volatility = regime_analysis["high_volatility"]
+    normal_volatility = regime_analysis["normal_volatility"]
+    zero_trade_note = (
+        [
+            "",
+            "The volatility filter removed all entry signals; the strategy did not take any positions.",
+        ]
+        if metrics["trade_count"] == 0
+        else []
+    )
+
+    return "\n".join(
+        [
+            "# Strategy Report — Variant",
+            "",
+            "## Variant Summary",
+            f"- Variant ID: {variant_config['variant_id']}",
+            f"- Parent: {variant_config['parent_variant_id']}",
+            f"- Modification: {variant_config['modification_type']}",
+            "- Status: backtested",
+            "",
+            "## Change Summary",
+            "Adds a volatility filter that blocks RSI entries during unusually high-volatility periods.",
+            "",
+            "## Strategy Code",
+            "Strategy logic is implemented in the QuantForge analysis pipeline.",
+            "See diff.md for modification details.",
+            "",
+            "## Assumptions",
+            "- Long-only",
+            f"- Volatility filter uses {variant_config['volatility_window']}-day rolling volatility",
+            "- Threshold is computed using only past data (no lookahead)",
+            "- No slippage modeled",
+            "",
+            "The volatility threshold is computed using only historical data available up to each point in time.",
+            "",
+            "## Metrics",
+            f"- Total Return: {metrics['total_return']:.6f}",
+            f"- Annualized Return: {metrics['annualized_return']:.6f}",
+            f"- Max Drawdown: {metrics['max_drawdown']:.6f}",
+            f"- Exposure: {metrics['exposure']:.6f}",
+            f"- Trade Count: {metrics['trade_count']}",
+            f"- Win Rate: {metrics['win_rate']:.6f}",
+            *zero_trade_note,
+            "",
+            "## Regime Analysis (Volatility)",
+            "",
+            "Volatility is measured as the 30-day rolling standard deviation of daily returns.",
+            "Rows without enough lookback history are excluded from this analysis.",
+            "",
+            f"- High-volatility threshold: {regime_analysis['threshold']:.6f}",
+            f"- High-volatility rows: {high_volatility['sample_count']}",
+            f"- Normal-volatility rows: {normal_volatility['sample_count']}",
+            "",
+            "### Regime Metrics",
+            "",
+            "| Regime | Avg Daily Return | Exposure | Trade Count |",
+            "|--------|-----------------|----------|-------------|",
+            "| High Volatility | "
+            f"{high_volatility['avg_daily_return']:.6f} | "
+            f"{high_volatility['exposure']:.6f} | "
+            f"{high_volatility['trade_count']} |",
+            "| Normal Volatility | "
+            f"{normal_volatility['avg_daily_return']:.6f} | "
+            f"{normal_volatility['exposure']:.6f} | "
+            f"{normal_volatility['trade_count']} |",
+            "",
+            "## Diagnostics",
+            f"- Low trade count: {low_trade_count}",
+            f"- High drawdown: {high_drawdown}",
+            "- Slippage not modeled: Slippage is not modeled; results may be optimistic",
+            "- Data source: user-provided CSV",
+            "",
+            "## Interpretation (Non-Advisory)",
+            "This strategy was evaluated on historical data only.",
+            "Performance may not generalize to future market conditions.",
+            "This analysis does not constitute financial advice.",
+            "",
+        ]
+    )
+
+
+def run_and_persist_volatility_filter_variant_analysis(
+    project_file: Path,
+    data_csv: Path,
+) -> dict:
+    """Run and persist the volatility-filter variant backtest."""
+    project_root = project_file.parent
+    baseline_results_path = project_root / "variants" / "baseline" / "backtest_results.csv"
+    baseline_config_path = project_root / "variants" / "baseline" / "strategy_config.json"
+    variant_dir = project_root / "variants" / VARIANT_ID
+    variant_config_path = variant_dir / "strategy_config.json"
+    results_path = variant_dir / "backtest_results.csv"
+    signals_path = variant_dir / "signals.csv"
+    metrics_path = variant_dir / "metrics.json"
+    report_path = variant_dir / "report.md"
+
+    if not baseline_results_path.exists():
+        raise ValueError("ERROR: Baseline analysis not found. Run 'quantforge analyze' first.")
+    if not variant_dir.exists():
+        raise ValueError(f"ERROR: Variant {VARIANT_ID} not found.")
+    if not variant_config_path.exists():
+        raise ValueError(f"Variant config not found: {variant_config_path}")
+    if results_path.exists() or metrics_path.exists() or report_path.exists():
+        raise ValueError(
+            f"ERROR: Variant analysis already exists for {VARIANT_ID}. Refusing to overwrite."
+        )
+
+    json.loads(project_file.read_text(encoding="utf-8"))
+    baseline_config = json.loads(baseline_config_path.read_text(encoding="utf-8"))
+    variant_config = json.loads(variant_config_path.read_text(encoding="utf-8"))
+    baseline_parameters = baseline_config.get("parameters", {})
+
+    prices = load_ohlcv_csv(data_csv)
+    baseline_signals = generate_rsi_signals(
+        prices,
+        entry_rsi=baseline_parameters.get("entry_rsi", 30),
+        exit_rsi=baseline_parameters.get("exit_rsi", 70),
+        rsi_window=baseline_parameters.get("rsi_window", 14),
+    )
+    signals = apply_volatility_filter_to_signals(
+        prices,
+        baseline_signals,
+        volatility_window=variant_config["volatility_window"],
+        volatility_threshold_quantile=variant_config["volatility_threshold_quantile"],
+    )
+    positions = build_long_positions(signals)
+    results = run_long_backtest(prices, positions)
+    summary = summarize_backtest(results)
+    metrics = {key: summary[key] for key in METRIC_KEYS}
+    regime_analysis = compute_volatility_regime_analysis(results)
+
+    results_output = results.rename_axis("date").reset_index()
+    results_output = results_output[
+        ["date", "close", "position", "asset_return", "strategy_return", "equity"]
+    ]
+    results_output = results_output.sort_values("date")
+    results_output.to_csv(results_path, index=False)
+
+    signals_output = signals.rename_axis("date").reset_index()
+    signals_output = signals_output[["date", "close", "rsi", "entry_signal", "exit_signal"]]
+    signals_output = signals_output.sort_values("date").dropna()
+    signals_output.to_csv(signals_path, index=False)
+
+    metrics_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+
+    change_summary_path = variant_dir / "change_summary.json"
+    change_summary = json.loads(change_summary_path.read_text(encoding="utf-8"))
+    change_summary["status"] = "backtested"
+    change_summary_path.write_text(
+        json.dumps(change_summary, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    report_path.write_text(
+        _variant_report_markdown(
+            variant_config=variant_config,
+            metrics=metrics,
+            regime_analysis=regime_analysis,
+        ),
+        encoding="utf-8",
+    )
+
+    return metrics
 
 
 def create_volatility_filter_variant(project_file: Path, user_instruction: str) -> Path:
