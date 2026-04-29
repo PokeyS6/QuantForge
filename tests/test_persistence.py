@@ -82,18 +82,7 @@ def analyzed_project(tmp_path):
             {
                 "strategy_id": "rsi_reversal_aapl",
                 "baseline_variant_id": "baseline",
-                "variants": [
-                    {
-                        "variant_id": "baseline",
-                        "strategy_type": "rsi_reversal",
-                        "parameters": {
-                            "ticker": "AAPL",
-                            "entry_rsi": 30,
-                            "exit_rsi": 70,
-                            "rsi_window": 14,
-                        },
-                    }
-                ],
+                "variants": ["baseline"],
             }
         )
         + "\n",
@@ -327,3 +316,21 @@ def test_create_volatility_filter_variant_updates_metadata_variants_list(
     metadata = json.loads(analyzed_project.read_text(encoding="utf-8"))
 
     assert metadata["variants"] == ["baseline", "variant_001_volatility_filter"]
+
+
+def test_create_volatility_filter_variant_preserves_existing_variant_ids(
+    analyzed_project,
+):
+    metadata = json.loads(analyzed_project.read_text(encoding="utf-8"))
+    metadata["variants"] = ["baseline", "variant_existing"]
+    analyzed_project.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+
+    create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+
+    updated_metadata = json.loads(analyzed_project.read_text(encoding="utf-8"))
+
+    assert updated_metadata["variants"] == [
+        "baseline",
+        "variant_existing",
+        "variant_001_volatility_filter",
+    ]

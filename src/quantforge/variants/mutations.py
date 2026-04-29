@@ -97,7 +97,12 @@ def create_volatility_filter_variant(project_file: Path, user_instruction: str) 
     (variant_dir / "diff.md").write_text(DIFF_MARKDOWN, encoding="utf-8")
 
     project = json.loads(project_file.read_text(encoding="utf-8"))
-    project["variants"] = ["baseline", VARIANT_ID]
+    variants = project.get("variants", [])
+    if not isinstance(variants, list):
+        raise ValueError("Project metadata 'variants' must be a list.")
+    if VARIANT_ID not in variants:
+        variants.append(VARIANT_ID)
+    project["variants"] = variants
     project_file.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
 
     return variant_dir
