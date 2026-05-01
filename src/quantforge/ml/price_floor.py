@@ -1,6 +1,7 @@
 """Feature and label helpers for the ML price-floor variant."""
 
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
 
 
 FEATURE_COLUMNS = [
@@ -53,3 +54,45 @@ def build_downside_risk_labels(
     labels[~future_closes.notna().all(axis=1)] = pd.NA
     labels.name = "downside_risk"
     return labels
+
+
+def compute_walk_forward_downside_risk_predictions(
+    features: pd.DataFrame,
+    labels: pd.Series,
+    min_training_rows: int = 252,
+) -> pd.Series:
+    """Compute walk-forward downside-risk probabilities without lookahead."""
+    if features.empty:
+        raise ValueError("Features cannot be empty.")
+    if labels.empty:
+        raise ValueError("Labels cannot be empty.")
+    if not features.index.equals(labels.index):
+        raise ValueError("Features and labels indexes must match.")
+    if min_training_rows <= 0:
+        raise ValueError("min_training_rows must be greater than 0.")
+
+    predictions = pd.Series(float("nan"), index=features.index, name="p_downside_risk")
+    for row_number, row_label in enumerate(features.index):
+        training_features = features.iloc[:row_number]
+        training_labels = labels.iloc[:row_number]
+        training_data = training_features.copy()
+        training_data["downside_risk"] = training_labels
+        training_data = training_data.dropna()
+
+        if len(training_data) < min_training_rows:
+            continue
+
+        y_train = training_data["downside_risk"]
+        if y_train.nunique() < 2:
+            continue
+
+        current_features = features.loc[[row_label]]
+        if current_features.isna().any(axis=None):
+            continue
+
+        model = LogisticRegression(max_iter=1000, random_state=42)
+        model.fit(training_data[features.columns], y_train)
+        class_index = list(model.classes_).index(1.0)
+        predictions.loc[row_label] = model.predict_proba(current_features)[0][class_index]
+
+    return predictions
