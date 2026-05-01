@@ -86,6 +86,34 @@ def _write_prices_csv(path):
     return path
 
 
+def _comparison_metrics(total_return: float = 0.1):
+    return {
+        "total_return": total_return,
+        "annualized_return": 0.2,
+        "max_drawdown": -0.3,
+        "exposure": 0.4,
+        "trade_count": 5,
+        "win_rate": 0.6,
+    }
+
+
+def _write_compare_inputs(project_file):
+    project_root = project_file.parent
+    reports_dir = project_root / "reports"
+    variant_dir = project_root / "variants" / "variant_001_volatility_filter"
+    reports_dir.mkdir(parents=True)
+    variant_dir.mkdir(parents=True)
+    (reports_dir / "baseline_metrics.json").write_text(
+        json.dumps(_comparison_metrics(total_return=0.1)) + "\n",
+        encoding="utf-8",
+    )
+    (variant_dir / "metrics.json").write_text(
+        json.dumps(_comparison_metrics(total_return=0.15)) + "\n",
+        encoding="utf-8",
+    )
+    return project_root
+
+
 def test_cli_help():
     result = runner.invoke(app, ["--help"])
 
@@ -278,3 +306,70 @@ def test_analyze_without_variant_id_keeps_baseline_behavior(tmp_path):
 
     assert result.exit_code == 0
     assert "QuantForge placeholder analysis" in result.output
+
+
+def test_compare_all_variants_writes_report_and_prints_preview(tmp_path):
+    project_file = _write_project(tmp_path)
+    project_root = _write_compare_inputs(project_file)
+
+    result = runner.invoke(app, ["compare", str(project_file), "--all-variants"])
+
+    report_path = project_root / "reports" / "comparison_report.md"
+    report = report_path.read_text(encoding="utf-8")
+    forbidden_words = ["improved", "better", "worse", "optimal", "recommended"]
+
+    assert result.exit_code == 0
+    assert report_path.exists()
+    assert "Metric | Baseline | Variant | Change" in result.output
+    assert result.output.count("- ") == 3
+    assert "- total_return increased by 0.050000." in result.output
+    for forbidden_word in forbidden_words:
+        assert forbidden_word not in result.output.lower()
+        assert forbidden_word not in report.lower()
+
+
+def test_compare_without_all_variants_errors(tmp_path):
+    project_file = _write_project(tmp_path)
+
+    result = runner.invoke(app, ["compare", str(project_file)])
+
+    assert result.exit_code != 0
+    assert result.output == "ERROR: Only --all-variants is supported in this phase.\n"
+
+
+def test_compare_refuses_to_overwrite_existing_report(tmp_path):
+    project_file = _write_project(tmp_path)
+    project_root = _write_compare_inputs(project_file)
+    (project_root / "reports" / "comparison_report.md").write_text(
+        "existing\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["compare", str(project_file), "--all-variants"])
+
+    assert result.exit_code != 0
+    assert result.output == "ERROR: Comparison report already exists. Refusing to overwrite.\n"
+
+
+def test_compare_missing_baseline_metrics_error_is_surfaced(tmp_path):
+    project_file = _write_project(tmp_path)
+
+    result = runner.invoke(app, ["compare", str(project_file), "--all-variants"])
+
+    assert result.exit_code != 0
+    assert result.output == "ERROR: Baseline metrics not found. Run 'quantforge analyze' first.\n"
+
+
+def test_compare_no_backtested_variants_error_is_surfaced(tmp_path):
+    project_file = _write_project(tmp_path)
+    reports_dir = project_file.parent / "reports"
+    reports_dir.mkdir()
+    (reports_dir / "baseline_metrics.json").write_text(
+        json.dumps(_comparison_metrics()) + "\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["compare", str(project_file), "--all-variants"])
+
+    assert result.exit_code != 0
+    assert result.output == "ERROR: No backtested variants available for comparison.\n"

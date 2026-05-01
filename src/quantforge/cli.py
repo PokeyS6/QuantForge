@@ -9,6 +9,7 @@ from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.models import new_rsi_project
 from quantforge.core.paths import project_dir
 from quantforge.core.project_io import get_baseline_variant, read_project, write_project
+from quantforge.reports.comparison import build_comparison_report
 from quantforge.variants.mutations import (
     create_volatility_filter_variant,
     run_and_persist_volatility_filter_variant_analysis,
@@ -138,6 +139,51 @@ def modify(
 
 
 @app.command()
-def compare() -> None:
-    """Compare placeholder strategy outputs."""
-    typer.echo(f"Compare placeholder. {NON_ADVISORY_NOTE}")
+def compare(
+    project_file: Path = typer.Argument(..., help="Path to strategy.qf.json."),
+    all_variants: bool = typer.Option(
+        False,
+        "--all-variants",
+        help="Compare all backtested variants against baseline.",
+    ),
+) -> None:
+    """Compare baseline and variant metrics."""
+    if not all_variants:
+        typer.echo("ERROR: Only --all-variants is supported in this phase.")
+        raise typer.Exit(code=1)
+
+    project_root = project_file.parent
+    report_path = project_root / "reports" / "comparison_report.md"
+    if report_path.exists():
+        typer.echo("ERROR: Comparison report already exists. Refusing to overwrite.")
+        raise typer.Exit(code=1)
+
+    try:
+        report = build_comparison_report(project_root)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report, encoding="utf-8")
+    _print_comparison_preview(report)
+
+
+def _print_comparison_preview(report: str) -> None:
+    lines = report.splitlines()
+    table_start = next(
+        index for index, line in enumerate(lines) if line == "| Metric | Baseline | Variant | Change |"
+    )
+    table_end = table_start
+    while table_end < len(lines) and lines[table_end].startswith("|"):
+        typer.echo(lines[table_end])
+        table_end += 1
+
+    observation_start = next(
+        index for index, line in enumerate(lines) if line == "### Observations"
+    )
+    observations = [
+        line for line in lines[observation_start + 1 :] if line.startswith("- ")
+    ][:3]
+    for observation in observations:
+        typer.echo(observation)

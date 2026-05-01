@@ -5,6 +5,11 @@ import pytest
 
 from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.project_io import read_project
+from quantforge.reports.comparison import (
+    build_comparison_report,
+    build_metrics_comparison_table,
+    generate_comparison_observations,
+)
 from quantforge.variants.mutations import (
     apply_volatility_filter_to_signals,
     create_volatility_filter_variant,
@@ -40,6 +45,17 @@ def _write_prices_csv(path):
         + "\n",
         encoding="utf-8",
     )
+
+
+def _comparison_metrics(total_return: float = 0.1) -> dict:
+    return {
+        "total_return": total_return,
+        "annualized_return": 0.2,
+        "max_drawdown": -0.3,
+        "exposure": 0.4,
+        "trade_count": 5,
+        "win_rate": 0.6,
+    }
 
 
 @pytest.fixture()
@@ -588,3 +604,106 @@ def test_run_and_persist_volatility_filter_variant_analysis_missing_config_field
         match="Variant config missing required field: volatility_window",
     ):
         run_and_persist_volatility_filter_variant_analysis(analyzed_project, data_csv)
+
+
+def test_build_metrics_comparison_table_formats_absolute_changes():
+    baseline_metrics = _comparison_metrics(total_return=0.1)
+    variant_metrics = _comparison_metrics(total_return=0.15)
+
+    table = build_metrics_comparison_table(baseline_metrics, variant_metrics)
+
+    assert "| Metric | Baseline | Variant | Change |" in table
+    assert "|--------|----------|---------|--------|" in table
+    assert "| total_return | 0.100000 | 0.150000 | 0.050000 |" in table
+    assert "%" not in table
+
+
+def test_generate_comparison_observations_avoid_forbidden_words():
+    baseline_metrics = _comparison_metrics(total_return=0.1)
+    variant_metrics = _comparison_metrics(total_return=0.05)
+
+    observations = generate_comparison_observations(baseline_metrics, variant_metrics)
+    observation_text = " ".join(observations).lower()
+
+    assert "total_return decreased by 0.050000." in observations
+    for forbidden_word in ["improved", "better", "worse", "optimal", "recommended"]:
+        assert forbidden_word not in observation_text
+
+
+def test_build_comparison_report_missing_baseline_metrics_raises(tmp_path):
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Baseline metrics not found. Run 'quantforge analyze' first.",
+    ):
+        build_comparison_report(tmp_path)
+
+
+def test_build_comparison_report_no_backtested_variants_raises(tmp_path):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True)
+    (reports_dir / "baseline_metrics.json").write_text(
+        json.dumps(_comparison_metrics()) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: No backtested variants available for comparison.",
+    ):
+        build_comparison_report(tmp_path)
+
+
+def test_build_comparison_report_schema_mismatch_raises(tmp_path):
+    reports_dir = tmp_path / "reports"
+    variant_dir = tmp_path / "variants" / "variant_001_volatility_filter"
+    reports_dir.mkdir(parents=True)
+    variant_dir.mkdir(parents=True)
+    (reports_dir / "baseline_metrics.json").write_text(
+        json.dumps(_comparison_metrics()) + "\n",
+        encoding="utf-8",
+    )
+    variant_metrics = _comparison_metrics()
+    del variant_metrics["win_rate"]
+    (variant_dir / "metrics.json").write_text(
+        json.dumps(variant_metrics) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Metrics schema mismatch between baseline and variant.",
+    ):
+        build_comparison_report(tmp_path)
+
+
+def test_build_comparison_report_includes_multiple_variants(tmp_path):
+    reports_dir = tmp_path / "reports"
+    first_variant_dir = tmp_path / "variants" / "variant_001_volatility_filter"
+    second_variant_dir = tmp_path / "variants" / "variant_existing"
+    reports_dir.mkdir(parents=True)
+    first_variant_dir.mkdir(parents=True)
+    second_variant_dir.mkdir(parents=True)
+    (reports_dir / "baseline_metrics.json").write_text(
+        json.dumps(_comparison_metrics(total_return=0.1)) + "\n",
+        encoding="utf-8",
+    )
+    (first_variant_dir / "metrics.json").write_text(
+        json.dumps(_comparison_metrics(total_return=0.15)) + "\n",
+        encoding="utf-8",
+    )
+    (second_variant_dir / "metrics.json").write_text(
+        json.dumps(_comparison_metrics(total_return=0.05)) + "\n",
+        encoding="utf-8",
+    )
+
+    report = build_comparison_report(tmp_path)
+    lower_report = report.lower()
+
+    assert report.startswith("# Strategy Comparison")
+    assert "## Baseline vs variant_001_volatility_filter" in report
+    assert "## Baseline vs variant_existing" in report
+    assert report.count("### Metrics Comparison") == 2
+    assert "See variants/variant_001_volatility_filter/diff.md for modification details." in report
+    assert "This analysis does not constitute financial advice." in report
+    for forbidden_word in ["improved", "better", "worse", "optimal", "recommended"]:
+        assert forbidden_word not in lower_report
