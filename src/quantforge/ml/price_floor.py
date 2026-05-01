@@ -11,6 +11,7 @@ FEATURE_COLUMNS = [
     "rolling_volatility_30d",
     "distance_from_sma_20",
 ]
+SIGNAL_COLUMNS = ["close", "rsi", "entry_signal", "exit_signal"]
 
 
 def _validate_prices(prices: pd.DataFrame) -> None:
@@ -96,3 +97,29 @@ def compute_walk_forward_downside_risk_predictions(
         predictions.loc[row_label] = model.predict_proba(current_features)[0][class_index]
 
     return predictions
+
+
+def apply_ml_price_floor_filter_to_signals(
+    signals: pd.DataFrame,
+    p_downside_risk: pd.Series,
+    risk_probability_threshold: float = 0.5,
+) -> pd.DataFrame:
+    """Apply ML downside-risk entry filtering to RSI signals."""
+    if signals.empty:
+        raise ValueError("Signals cannot be empty.")
+    if p_downside_risk.empty:
+        raise ValueError("Predictions cannot be empty.")
+    missing_signal_columns = set(SIGNAL_COLUMNS) - set(signals.columns)
+    if missing_signal_columns:
+        raise ValueError("Signals must include close, rsi, entry_signal, and exit_signal columns.")
+    if not signals.index.equals(p_downside_risk.index):
+        raise ValueError("Signals and predictions indexes must match.")
+    if not 0 <= risk_probability_threshold <= 1:
+        raise ValueError("risk_probability_threshold must be between 0 and 1.")
+
+    ml_entry_allowed = (p_downside_risk <= risk_probability_threshold).fillna(False)
+    filtered = signals[SIGNAL_COLUMNS].copy()
+    filtered["entry_signal"] = filtered["entry_signal"] & ml_entry_allowed
+    filtered["p_downside_risk"] = p_downside_risk
+    filtered["ml_entry_allowed"] = ml_entry_allowed
+    return filtered

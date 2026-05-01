@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from quantforge.ml.price_floor import (
+    apply_ml_price_floor_filter_to_signals,
     build_downside_risk_labels,
     build_ml_price_floor_features,
     compute_walk_forward_downside_risk_predictions,
@@ -189,3 +190,81 @@ def test_walk_forward_predictions_do_not_train_on_current_or_future_rows(monkeyp
     assert len(fit_indexes) == len(predicted_indexes)
     for training_index, prediction_index in zip(fit_indexes, predicted_indexes, strict=True):
         assert training_index.max() < prediction_index
+
+
+def test_apply_ml_price_floor_filter_to_signals_filters_entries_and_preserves_exits():
+    index = pd.date_range("2020-01-01", periods=5)
+    signals = pd.DataFrame(
+        {
+            "close": [100, 101, 102, 103, 104],
+            "rsi": [20, 21, 22, 23, 24],
+            "entry_signal": [True, True, True, False, True],
+            "exit_signal": [False, True, False, True, False],
+        },
+        index=index,
+    )
+    p_downside_risk = pd.Series(
+        [0.4, 0.5, 0.6, 0.2, float("nan")],
+        index=index,
+        name="p_downside_risk",
+    )
+
+    filtered = apply_ml_price_floor_filter_to_signals(
+        signals,
+        p_downside_risk,
+        risk_probability_threshold=0.5,
+    )
+
+    assert list(filtered.columns) == [
+        "close",
+        "rsi",
+        "entry_signal",
+        "exit_signal",
+        "p_downside_risk",
+        "ml_entry_allowed",
+    ]
+    assert filtered.index.equals(signals.index)
+    assert filtered["entry_signal"].tolist() == [True, True, False, False, False]
+    assert filtered["ml_entry_allowed"].tolist() == [True, True, False, True, False]
+    assert filtered["exit_signal"].tolist() == signals["exit_signal"].tolist()
+
+
+def test_apply_ml_price_floor_filter_to_signals_invalid_inputs_raise():
+    index = pd.date_range("2020-01-01", periods=2)
+    signals = pd.DataFrame(
+        {
+            "close": [100, 101],
+            "rsi": [20, 21],
+            "entry_signal": [True, True],
+            "exit_signal": [False, False],
+        },
+        index=index,
+    )
+    p_downside_risk = pd.Series([0.4, 0.5], index=index, name="p_downside_risk")
+
+    with pytest.raises(ValueError, match="Signals cannot be empty."):
+        apply_ml_price_floor_filter_to_signals(signals.iloc[0:0], p_downside_risk)
+    with pytest.raises(ValueError, match="Predictions cannot be empty."):
+        apply_ml_price_floor_filter_to_signals(signals, p_downside_risk.iloc[0:0])
+    with pytest.raises(
+        ValueError,
+        match="Signals must include close, rsi, entry_signal, and exit_signal columns.",
+    ):
+        apply_ml_price_floor_filter_to_signals(
+            signals.drop(columns=["rsi"]),
+            p_downside_risk,
+        )
+    with pytest.raises(ValueError, match="Signals and predictions indexes must match."):
+        apply_ml_price_floor_filter_to_signals(
+            signals,
+            p_downside_risk.rename(index={index[0]: pd.Timestamp("1999-01-01")}),
+        )
+    with pytest.raises(
+        ValueError,
+        match="risk_probability_threshold must be between 0 and 1.",
+    ):
+        apply_ml_price_floor_filter_to_signals(
+            signals,
+            p_downside_risk,
+            risk_probability_threshold=1.1,
+        )
