@@ -86,7 +86,18 @@ def analyzed_project(tmp_path):
             {
                 "strategy_id": "rsi_reversal_aapl",
                 "baseline_variant_id": "baseline",
-                "variants": ["baseline"],
+                "variants": [
+                    {
+                        "variant_id": "baseline",
+                        "strategy_type": "rsi_reversal",
+                        "parameters": {
+                            "ticker": "AAPL",
+                            "entry_rsi": 30,
+                            "exit_rsi": 70,
+                            "rsi_window": 14,
+                        },
+                    }
+                ],
             }
         )
         + "\n",
@@ -94,22 +105,6 @@ def analyzed_project(tmp_path):
     )
     (baseline_dir / "backtest_results.csv").write_text(
         "date,close,position,asset_return,strategy_return,equity\n",
-        encoding="utf-8",
-    )
-    (baseline_dir / "strategy_config.json").write_text(
-        json.dumps(
-            {
-                "variant_id": "baseline",
-                "strategy_type": "rsi_reversal",
-                "parameters": {
-                    "ticker": "AAPL",
-                    "entry_rsi": 30,
-                    "exit_rsi": 70,
-                    "rsi_window": 14,
-                },
-            }
-        )
-        + "\n",
         encoding="utf-8",
     )
     return project_file
@@ -335,7 +330,7 @@ def test_create_volatility_filter_variant_updates_metadata_variants_list(
 
     metadata = json.loads(analyzed_project.read_text(encoding="utf-8"))
 
-    assert metadata["variants"] == ["baseline", "variant_001_volatility_filter"]
+    assert metadata["variants"][-1] == "variant_001_volatility_filter"
 
 
 def test_create_volatility_filter_variant_preserves_existing_variant_ids(
@@ -478,9 +473,7 @@ def test_run_and_persist_volatility_filter_variant_analysis_writes_outputs(
     create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
     project_root = analyzed_project.parent
     baseline_results_path = project_root / "variants" / "baseline" / "backtest_results.csv"
-    baseline_config_path = project_root / "variants" / "baseline" / "strategy_config.json"
     original_baseline_results = baseline_results_path.read_text(encoding="utf-8")
-    original_baseline_config = baseline_config_path.read_text(encoding="utf-8")
 
     metrics = run_and_persist_volatility_filter_variant_analysis(
         analyzed_project,
@@ -535,7 +528,6 @@ def test_run_and_persist_volatility_filter_variant_analysis_writes_outputs(
         in report
     )
     assert baseline_results_path.read_text(encoding="utf-8") == original_baseline_results
-    assert baseline_config_path.read_text(encoding="utf-8") == original_baseline_config
 
 
 def test_run_and_persist_volatility_filter_variant_analysis_refuses_overwrite(
@@ -554,5 +546,45 @@ def test_run_and_persist_volatility_filter_variant_analysis_refuses_overwrite(
             "ERROR: Variant analysis already exists for variant_001_volatility_filter. "
             "Refusing to overwrite."
         ),
+    ):
+        run_and_persist_volatility_filter_variant_analysis(analyzed_project, data_csv)
+
+
+def test_run_and_persist_volatility_filter_variant_analysis_missing_baseline_parameters_raises(
+    analyzed_project,
+    tmp_path,
+):
+    metadata = json.loads(analyzed_project.read_text(encoding="utf-8"))
+    metadata["variants"] = ["baseline", "variant_001_volatility_filter"]
+    analyzed_project.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+    create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+
+    with pytest.raises(
+        ValueError,
+        match="Baseline RSI parameters not found in project metadata.",
+    ):
+        run_and_persist_volatility_filter_variant_analysis(analyzed_project, data_csv)
+
+
+def test_run_and_persist_volatility_filter_variant_analysis_missing_config_field_raises(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+    variant_dir = create_volatility_filter_variant(
+        analyzed_project,
+        "Add a volatility filter",
+    )
+    config_path = variant_dir / "strategy_config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    del config["volatility_window"]
+    config_path.write_text(json.dumps(config) + "\n", encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="Variant config missing required field: volatility_window",
     ):
         run_and_persist_volatility_filter_variant_analysis(analyzed_project, data_csv)

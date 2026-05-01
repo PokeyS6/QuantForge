@@ -211,6 +211,25 @@ def _variant_report_markdown(
     )
 
 
+def _baseline_rsi_parameters(project: dict) -> dict:
+    baseline_variant_id = project.get("baseline_variant_id", "baseline")
+    for variant in project.get("variants", []):
+        if (
+            isinstance(variant, dict)
+            and variant.get("variant_id") == baseline_variant_id
+            and variant.get("strategy_type") == "rsi_reversal"
+            and isinstance(variant.get("parameters"), dict)
+        ):
+            return variant["parameters"]
+    raise ValueError("Baseline RSI parameters not found in project metadata.")
+
+
+def _require_variant_config_field(variant_config: dict, field: str):
+    if field not in variant_config:
+        raise ValueError(f"Variant config missing required field: {field}")
+    return variant_config[field]
+
+
 def run_and_persist_volatility_filter_variant_analysis(
     project_file: Path,
     data_csv: Path,
@@ -218,7 +237,6 @@ def run_and_persist_volatility_filter_variant_analysis(
     """Run and persist the volatility-filter variant backtest."""
     project_root = project_file.parent
     baseline_results_path = project_root / "variants" / "baseline" / "backtest_results.csv"
-    baseline_config_path = project_root / "variants" / "baseline" / "strategy_config.json"
     variant_dir = project_root / "variants" / VARIANT_ID
     variant_config_path = variant_dir / "strategy_config.json"
     results_path = variant_dir / "backtest_results.csv"
@@ -237,10 +255,14 @@ def run_and_persist_volatility_filter_variant_analysis(
             f"ERROR: Variant analysis already exists for {VARIANT_ID}. Refusing to overwrite."
         )
 
-    json.loads(project_file.read_text(encoding="utf-8"))
-    baseline_config = json.loads(baseline_config_path.read_text(encoding="utf-8"))
+    project = json.loads(project_file.read_text(encoding="utf-8"))
     variant_config = json.loads(variant_config_path.read_text(encoding="utf-8"))
-    baseline_parameters = baseline_config.get("parameters", {})
+    baseline_parameters = _baseline_rsi_parameters(project)
+    volatility_window = _require_variant_config_field(variant_config, "volatility_window")
+    volatility_threshold_quantile = _require_variant_config_field(
+        variant_config,
+        "volatility_threshold_quantile",
+    )
 
     prices = load_ohlcv_csv(data_csv)
     baseline_signals = generate_rsi_signals(
@@ -252,8 +274,8 @@ def run_and_persist_volatility_filter_variant_analysis(
     signals = apply_volatility_filter_to_signals(
         prices,
         baseline_signals,
-        volatility_window=variant_config["volatility_window"],
-        volatility_threshold_quantile=variant_config["volatility_threshold_quantile"],
+        volatility_window=volatility_window,
+        volatility_threshold_quantile=volatility_threshold_quantile,
     )
     positions = build_long_positions(signals)
     results = run_long_backtest(prices, positions)

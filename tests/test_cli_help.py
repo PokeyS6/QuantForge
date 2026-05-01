@@ -24,28 +24,32 @@ def _write_project(tmp_path, with_baseline: bool = True):
     project_root = tmp_path / "aapl-rsi-reversal"
     project_root.mkdir()
     project_file = project_root / "strategy.qf.json"
-    project_file.write_text('{"variants": ["baseline"]}\n', encoding="utf-8")
+    project_file.write_text(
+        json.dumps(
+            {
+                "baseline_variant_id": "baseline",
+                "variants": [
+                    {
+                        "variant_id": "baseline",
+                        "strategy_type": "rsi_reversal",
+                        "parameters": {
+                            "ticker": "AAPL",
+                            "entry_rsi": 30,
+                            "exit_rsi": 70,
+                            "rsi_window": 14,
+                        },
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     if with_baseline:
         baseline_dir = project_root / "variants" / "baseline"
         baseline_dir.mkdir(parents=True)
         (baseline_dir / "backtest_results.csv").write_text(
             "date,close,position,asset_return,strategy_return,equity\n",
-            encoding="utf-8",
-        )
-        (baseline_dir / "strategy_config.json").write_text(
-            json.dumps(
-                {
-                    "variant_id": "baseline",
-                    "strategy_type": "rsi_reversal",
-                    "parameters": {
-                        "ticker": "AAPL",
-                        "entry_rsi": 30,
-                        "exit_rsi": 70,
-                        "rsi_window": 14,
-                    },
-                }
-            )
-            + "\n",
             encoding="utf-8",
         )
     return project_file
