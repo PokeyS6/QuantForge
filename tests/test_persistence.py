@@ -14,6 +14,7 @@ from quantforge.variants.mutations import (
     apply_volatility_filter_to_signals,
     create_ml_price_floor_variant,
     create_volatility_filter_variant,
+    run_and_persist_ml_price_floor_variant_analysis,
     run_and_persist_volatility_filter_variant_analysis,
 )
 
@@ -811,3 +812,151 @@ def test_create_ml_price_floor_variant_preserves_existing_variants_and_appends(
         "variant_001_volatility_filter",
         "variant_002_ml_price_floor",
     ]
+
+
+def test_run_and_persist_ml_price_floor_variant_analysis_missing_baseline_raises(
+    tmp_path,
+):
+    project_root = tmp_path / "aapl-rsi-reversal"
+    project_root.mkdir()
+    project_file = project_root / "strategy.qf.json"
+    project_file.write_text('{"variants": []}\n', encoding="utf-8")
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Baseline analysis not found. Run 'quantforge analyze' first.",
+    ):
+        run_and_persist_ml_price_floor_variant_analysis(project_file, data_csv)
+
+
+def test_run_and_persist_ml_price_floor_variant_analysis_missing_variant_raises(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Variant variant_002_ml_price_floor not found.",
+    ):
+        run_and_persist_ml_price_floor_variant_analysis(analyzed_project, data_csv)
+
+
+def test_run_and_persist_ml_price_floor_variant_analysis_writes_outputs(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+    variant_dir = create_ml_price_floor_variant(analyzed_project, "Add an ML price floor")
+    baseline_results_path = (
+        analyzed_project.parent / "variants" / "baseline" / "backtest_results.csv"
+    )
+    original_baseline_results = baseline_results_path.read_text(encoding="utf-8")
+
+    metrics = run_and_persist_ml_price_floor_variant_analysis(analyzed_project, data_csv)
+
+    results = pd.read_csv(variant_dir / "backtest_results.csv")
+    signals = pd.read_csv(variant_dir / "signals.csv")
+    metrics_json = json.loads((variant_dir / "metrics.json").read_text(encoding="utf-8"))
+    change_summary = json.loads(
+        (variant_dir / "change_summary.json").read_text(encoding="utf-8")
+    )
+    report = (variant_dir / "report.md").read_text(encoding="utf-8")
+
+    assert list(results.columns) == [
+        "date",
+        "close",
+        "position",
+        "asset_return",
+        "strategy_return",
+        "equity",
+    ]
+    assert list(signals.columns) == [
+        "date",
+        "close",
+        "rsi",
+        "entry_signal",
+        "exit_signal",
+        "p_downside_risk",
+        "ml_entry_allowed",
+    ]
+    assert list(metrics_json) == [
+        "total_return",
+        "annualized_return",
+        "max_drawdown",
+        "exposure",
+        "trade_count",
+        "win_rate",
+    ]
+    assert metrics == metrics_json
+    assert not results.isna().any().any()
+    assert not signals.isna().any().any()
+    assert change_summary["status"] == "backtested"
+    assert "# Strategy Report — Variant" in report
+    assert "## ML Explanation" in report
+    assert "## Assumptions" in report
+    assert "## ML Feature Coefficients" in report
+    assert (
+        "No model coefficients available because there was insufficient training data."
+        in report
+    )
+    assert "## ML Warnings" in report
+    assert "## Transparency Note" in report
+    assert "## Insufficient Data Note" in report
+    assert "## Regime Analysis (Volatility)" in report
+    assert (
+        "The volatility threshold is computed using only historical data available up to each point in time."
+        not in report
+    )
+    assert (
+        "The downside-risk prediction is computed using only historical data available before each prediction point."
+        in report
+    )
+    assert (
+        "The ML price floor removed all entry signals; the strategy did not take any positions."
+        in report
+    )
+    assert baseline_results_path.read_text(encoding="utf-8") == original_baseline_results
+
+
+def test_run_and_persist_ml_price_floor_variant_analysis_refuses_overwrite(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+    create_ml_price_floor_variant(analyzed_project, "Add an ML price floor")
+
+    run_and_persist_ml_price_floor_variant_analysis(analyzed_project, data_csv)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "ERROR: Variant analysis already exists for variant_002_ml_price_floor. "
+            "Refusing to overwrite."
+        ),
+    ):
+        run_and_persist_ml_price_floor_variant_analysis(analyzed_project, data_csv)
+
+
+def test_run_and_persist_ml_price_floor_variant_analysis_missing_config_field_raises(
+    analyzed_project,
+    tmp_path,
+):
+    data_csv = tmp_path / "prices.csv"
+    _write_prices_csv(data_csv)
+    variant_dir = create_ml_price_floor_variant(analyzed_project, "Add an ML price floor")
+    config_path = variant_dir / "strategy_config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    del config["risk_probability_threshold"]
+    config_path.write_text(json.dumps(config) + "\n", encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="Variant config missing required field: risk_probability_threshold",
+    ):
+        run_and_persist_ml_price_floor_variant_analysis(analyzed_project, data_csv)
