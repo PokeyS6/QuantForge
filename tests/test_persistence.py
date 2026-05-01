@@ -12,6 +12,7 @@ from quantforge.reports.comparison import (
 )
 from quantforge.variants.mutations import (
     apply_volatility_filter_to_signals,
+    create_ml_price_floor_variant,
     create_volatility_filter_variant,
     run_and_persist_volatility_filter_variant_analysis,
 )
@@ -707,3 +708,106 @@ def test_build_comparison_report_includes_multiple_variants(tmp_path):
     assert "This analysis does not constitute financial advice." in report
     for forbidden_word in ["improved", "better", "worse", "optimal", "recommended"]:
         assert forbidden_word not in lower_report
+
+
+def test_create_ml_price_floor_variant_writes_expected_artifacts(analyzed_project):
+    variant_dir = create_ml_price_floor_variant(
+        analyzed_project,
+        "Add an ML price floor",
+    )
+
+    strategy_config = json.loads(
+        (variant_dir / "strategy_config.json").read_text(encoding="utf-8")
+    )
+    change_summary = json.loads(
+        (variant_dir / "change_summary.json").read_text(encoding="utf-8")
+    )
+    diff = (variant_dir / "diff.md").read_text(encoding="utf-8")
+
+    assert strategy_config == {
+        "variant_id": "variant_002_ml_price_floor",
+        "parent_variant_id": "baseline",
+        "modification_type": "ml_price_floor",
+        "model_type": "logistic_regression",
+        "prediction_target": "downside_risk",
+        "forecast_horizon_days": 5,
+        "downside_threshold": -0.03,
+        "risk_probability_threshold": 0.5,
+        "training_mode": "walk_forward_expanding",
+        "min_training_rows": 252,
+        "features": [
+            "return_1d",
+            "return_5d",
+            "return_10d",
+            "rolling_volatility_30d",
+            "distance_from_sma_20",
+        ],
+        "entry_rule": "RSI < 30 AND predicted downside risk probability <= 0.5",
+        "exit_rule": "RSI > 70",
+    }
+    assert change_summary["status"] == "created_not_backtested"
+    assert change_summary == {
+        "variant_id": "variant_002_ml_price_floor",
+        "parent_variant_id": "baseline",
+        "user_instruction": "Add ML price floor",
+        "summary": "Adds an ML downside-risk filter that blocks RSI entries when predicted downside risk is above the configured probability threshold.",
+        "rationale": "Adds a hardcoded reference ML filter for the final demo while preserving auditability and no-lookahead constraints.",
+        "assumptions": [
+            "Features use historical close-price data only.",
+            "The model is trained with walk-forward expanding windows.",
+            "The filter affects entries only; exits remain unchanged.",
+        ],
+        "status": "created_not_backtested",
+    }
+    assert "Adds an ML downside-risk filter to the baseline RSI entry rule." in diff
+    assert "AND predicted downside risk probability <= 0.5" in diff
+    assert "Strategy logic is implemented in the QuantForge analysis pipeline." in diff
+    assert "No separate strategy code file exists at this stage." in diff
+
+
+def test_create_ml_price_floor_variant_duplicate_raises(analyzed_project):
+    create_ml_price_floor_variant(analyzed_project, "Add an ML price floor")
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Variant variant_002_ml_price_floor already exists. Refusing to overwrite.",
+    ):
+        create_ml_price_floor_variant(analyzed_project, "Add an ML price floor")
+
+
+def test_create_ml_price_floor_variant_missing_baseline_backtest_raises(tmp_path):
+    project_root = tmp_path / "aapl-rsi-reversal"
+    project_root.mkdir()
+    project_file = project_root / "strategy.qf.json"
+    project_file.write_text('{"variants": []}\n', encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Baseline analysis not found. Run 'quantforge analyze' first.",
+    ):
+        create_ml_price_floor_variant(project_file, "Add an ML price floor")
+
+
+def test_create_ml_price_floor_variant_unsupported_modification_raises(
+    analyzed_project,
+):
+    with pytest.raises(
+        ValueError,
+        match="ERROR: Unsupported modification. Only 'ml price floor' is supported.",
+    ):
+        create_ml_price_floor_variant(analyzed_project, "Add an ML momentum filter")
+
+
+def test_create_ml_price_floor_variant_preserves_existing_variants_and_appends(
+    analyzed_project,
+):
+    create_volatility_filter_variant(analyzed_project, "Add a volatility filter")
+
+    create_ml_price_floor_variant(analyzed_project, "Add an ML price floor")
+
+    metadata = json.loads(analyzed_project.read_text(encoding="utf-8"))
+
+    assert metadata["variants"][-2:] == [
+        "variant_001_volatility_filter",
+        "variant_002_ml_price_floor",
+    ]

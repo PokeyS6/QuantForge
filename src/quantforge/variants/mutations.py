@@ -13,6 +13,7 @@ from quantforge.strategies.rsi import generate_rsi_signals
 
 
 VARIANT_ID = "variant_001_volatility_filter"
+ML_PRICE_FLOOR_VARIANT_ID = "variant_002_ml_price_floor"
 METRIC_KEYS = [
     "total_return",
     "annualized_return",
@@ -41,6 +42,42 @@ CHANGE_SUMMARY = {
     "assumptions": [
         "Volatility is measured as the 30-day rolling standard deviation of daily returns.",
         "High volatility is defined as rolling volatility above the 75th percentile.",
+        "The filter affects entries only; exits remain unchanged.",
+    ],
+    "status": "created_not_backtested",
+}
+
+ML_PRICE_FLOOR_STRATEGY_CONFIG = {
+    "variant_id": ML_PRICE_FLOOR_VARIANT_ID,
+    "parent_variant_id": "baseline",
+    "modification_type": "ml_price_floor",
+    "model_type": "logistic_regression",
+    "prediction_target": "downside_risk",
+    "forecast_horizon_days": 5,
+    "downside_threshold": -0.03,
+    "risk_probability_threshold": 0.5,
+    "training_mode": "walk_forward_expanding",
+    "min_training_rows": 252,
+    "features": [
+        "return_1d",
+        "return_5d",
+        "return_10d",
+        "rolling_volatility_30d",
+        "distance_from_sma_20",
+    ],
+    "entry_rule": "RSI < 30 AND predicted downside risk probability <= 0.5",
+    "exit_rule": "RSI > 70",
+}
+
+ML_PRICE_FLOOR_CHANGE_SUMMARY = {
+    "variant_id": ML_PRICE_FLOOR_VARIANT_ID,
+    "parent_variant_id": "baseline",
+    "user_instruction": "Add ML price floor",
+    "summary": "Adds an ML downside-risk filter that blocks RSI entries when predicted downside risk is above the configured probability threshold.",
+    "rationale": "Adds a hardcoded reference ML filter for the final demo while preserving auditability and no-lookahead constraints.",
+    "assumptions": [
+        "Features use historical close-price data only.",
+        "The model is trained with walk-forward expanding windows.",
         "The filter affects entries only; exits remain unchanged.",
     ],
     "status": "created_not_backtested",
@@ -76,6 +113,43 @@ RSI > 70
 ## Implementation Note
 
 Strategy logic is currently implemented within the QuantForge analysis pipeline.
+No separate strategy code file exists at this stage.
+
+## Backtest Status
+
+This variant has been created but not backtested yet.
+"""
+
+ML_PRICE_FLOOR_DIFF_MARKDOWN = """# Variant Diff — variant_002_ml_price_floor
+
+Parent: baseline
+
+## Summary
+
+Adds an ML downside-risk filter to the baseline RSI entry rule.
+
+## Baseline Entry Rule
+
+Enter long when:
+
+RSI < 30
+
+## Variant Entry Rule
+
+Enter long when:
+
+RSI < 30  
+AND predicted downside risk probability <= 0.5
+
+## Exit Rule
+
+Unchanged:
+
+RSI > 70
+
+## Implementation Note
+
+Strategy logic is implemented in the QuantForge analysis pipeline.
 No separate strategy code file exists at this stage.
 
 ## Backtest Status
@@ -351,6 +425,47 @@ def create_volatility_filter_variant(project_file: Path, user_instruction: str) 
         raise ValueError("Project metadata 'variants' must be a list.")
     if VARIANT_ID not in variants:
         variants.append(VARIANT_ID)
+    project["variants"] = variants
+    project_file.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
+
+    return variant_dir
+
+
+def create_ml_price_floor_variant(project_file: Path, user_instruction: str) -> Path:
+    """Create placeholder artifacts for an ML price-floor variant."""
+    project_root = project_file.parent
+    baseline_results_path = project_root / "variants" / "baseline" / "backtest_results.csv"
+    variant_dir = project_root / "variants" / ML_PRICE_FLOOR_VARIANT_ID
+
+    if "ml price floor" not in user_instruction.lower():
+        raise ValueError("ERROR: Unsupported modification. Only 'ml price floor' is supported.")
+    if not baseline_results_path.exists():
+        raise ValueError("ERROR: Baseline analysis not found. Run 'quantforge analyze' first.")
+    if variant_dir.exists():
+        raise ValueError(
+            f"ERROR: Variant {ML_PRICE_FLOOR_VARIANT_ID} already exists. Refusing to overwrite."
+        )
+
+    variant_dir.mkdir(parents=True)
+    (variant_dir / "strategy_config.json").write_text(
+        json.dumps(ML_PRICE_FLOOR_STRATEGY_CONFIG, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (variant_dir / "change_summary.json").write_text(
+        json.dumps(ML_PRICE_FLOOR_CHANGE_SUMMARY, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (variant_dir / "diff.md").write_text(
+        ML_PRICE_FLOOR_DIFF_MARKDOWN,
+        encoding="utf-8",
+    )
+
+    project = json.loads(project_file.read_text(encoding="utf-8"))
+    variants = project.get("variants", [])
+    if not isinstance(variants, list):
+        raise ValueError("Project metadata 'variants' must be a list.")
+    if ML_PRICE_FLOOR_VARIANT_ID not in variants:
+        variants.append(ML_PRICE_FLOOR_VARIANT_ID)
     project["variants"] = variants
     project_file.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
 
