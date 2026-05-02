@@ -13,7 +13,19 @@ This variant has not been backtested yet.
 Variant backtesting will be available in a subsequent step.
 """
 
+ML_SUCCESS_OUTPUT = """Variant 'variant_002_ml_price_floor' created.
+
+This variant has not been backtested yet.
+Variant backtesting will be available in a subsequent step.
+"""
+
 VARIANT_ANALYZE_SUCCESS_OUTPUT = """Variant analysis complete: variant_001_volatility_filter
+
+This variant analysis has been saved in the variant folder.
+This is a historical backtest, not financial advice.
+"""
+
+ML_VARIANT_ANALYZE_SUCCESS_OUTPUT = """Variant analysis complete: variant_002_ml_price_floor
 
 This variant analysis has been saved in the variant folder.
 This is a historical backtest, not financial advice.
@@ -163,6 +175,19 @@ def test_modify_creates_volatility_filter_variant(tmp_path):
     ).exists()
 
 
+def test_modify_creates_ml_price_floor_variant(tmp_path):
+    project_file = _write_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["modify", str(project_file), "Add an ML price floor"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ML_SUCCESS_OUTPUT
+    assert (project_file.parent / "variants" / "variant_002_ml_price_floor").exists()
+
+
 def test_modify_missing_baseline_backtest_exits_nonzero(tmp_path):
     project_file = _write_project(tmp_path, with_baseline=False)
 
@@ -189,7 +214,7 @@ def test_modify_unsupported_instruction_exits_nonzero(tmp_path):
     assert result.exit_code != 0
     assert (
         result.output
-        == "ERROR: Unsupported modification. Only 'volatility filter' is supported.\n"
+        == "ERROR: Unsupported modification. Only 'volatility filter' and 'ml price floor' are supported.\n"
     )
 
 
@@ -240,6 +265,36 @@ def test_analyze_supported_variant_runs_and_persists_outputs(tmp_path):
     assert (variant_dir / "metrics.json").exists()
     assert (variant_dir / "report.md").exists()
     assert (variant_dir / "backtest_results.csv").exists()
+
+
+def test_analyze_supported_ml_variant_runs_and_persists_outputs(tmp_path):
+    project_file = _write_project(tmp_path)
+    data_csv = _write_prices_csv(tmp_path / "prices.csv")
+    modify_result = runner.invoke(
+        app,
+        ["modify", str(project_file), "Add an ML price floor"],
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "analyze",
+            str(project_file),
+            "--data-csv",
+            str(data_csv),
+            "--variant-id",
+            "variant_002_ml_price_floor",
+        ],
+    )
+
+    variant_dir = project_file.parent / "variants" / "variant_002_ml_price_floor"
+    assert modify_result.exit_code == 0
+    assert result.exit_code == 0
+    assert result.output == ML_VARIANT_ANALYZE_SUCCESS_OUTPUT
+    assert (variant_dir / "metrics.json").exists()
+    assert (variant_dir / "report.md").exists()
+    assert (variant_dir / "backtest_results.csv").exists()
+    assert (variant_dir / "signals.csv").exists()
 
 
 def test_analyze_variant_requires_data_csv(tmp_path):

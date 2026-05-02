@@ -11,7 +11,9 @@ from quantforge.core.paths import project_dir
 from quantforge.core.project_io import get_baseline_variant, read_project, write_project
 from quantforge.reports.comparison import build_comparison_report
 from quantforge.variants.mutations import (
+    create_ml_price_floor_variant,
     create_volatility_filter_variant,
+    run_and_persist_ml_price_floor_variant_analysis,
     run_and_persist_volatility_filter_variant_analysis,
 )
 
@@ -70,16 +72,20 @@ def analyze(
         if data_csv is None:
             typer.echo("ERROR: --data-csv is required when --variant-id is provided.")
             raise typer.Exit(code=1)
-        if variant_id != "variant_001_volatility_filter":
+        if variant_id == "variant_001_volatility_filter":
+            analysis_runner = run_and_persist_volatility_filter_variant_analysis
+        elif variant_id == "variant_002_ml_price_floor":
+            analysis_runner = run_and_persist_ml_price_floor_variant_analysis
+        else:
             typer.echo(f"ERROR: Unsupported variant id: {variant_id}")
             raise typer.Exit(code=1)
         try:
-            run_and_persist_volatility_filter_variant_analysis(project_file, data_csv)
+            analysis_runner(project_file, data_csv)
         except ValueError as error:
             typer.echo(str(error))
             raise typer.Exit(code=1) from error
 
-        typer.echo("Variant analysis complete: variant_001_volatility_filter")
+        typer.echo(f"Variant analysis complete: {variant_id}")
         typer.echo("")
         typer.echo("This variant analysis has been saved in the variant folder.")
         typer.echo("This is a historical backtest, not financial advice.")
@@ -126,13 +132,27 @@ def modify(
     user_instruction: str = typer.Argument(..., help="User-provided modification request."),
 ) -> None:
     """Create a placeholder strategy variant."""
+    instruction = user_instruction.lower()
+    if "volatility filter" in instruction:
+        variant_creator = create_volatility_filter_variant
+        variant_id = "variant_001_volatility_filter"
+    elif "ml price floor" in instruction:
+        variant_creator = create_ml_price_floor_variant
+        variant_id = "variant_002_ml_price_floor"
+    else:
+        typer.echo(
+            "ERROR: Unsupported modification. Only 'volatility filter' and "
+            "'ml price floor' are supported."
+        )
+        raise typer.Exit(code=1)
+
     try:
-        create_volatility_filter_variant(project_file, user_instruction)
+        variant_creator(project_file, user_instruction)
     except ValueError as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
 
-    typer.echo("Variant 'variant_001_volatility_filter' created.")
+    typer.echo(f"Variant '{variant_id}' created.")
     typer.echo("")
     typer.echo("This variant has not been backtested yet.")
     typer.echo("Variant backtesting will be available in a subsequent step.")
