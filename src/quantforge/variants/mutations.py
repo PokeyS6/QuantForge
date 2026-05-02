@@ -315,9 +315,18 @@ def _metric_subset(summary: dict) -> dict:
     return {key: summary[key] for key in METRIC_KEYS}
 
 
-def _final_ml_coefficients(features: pd.DataFrame, labels: pd.Series, min_training_rows: int):
-    training_data = features.copy()
-    training_data["downside_risk"] = labels
+def _final_ml_coefficients(
+    features: pd.DataFrame,
+    labels: pd.Series,
+    min_training_rows: int,
+    forecast_horizon_days: int,
+    prediction_index,
+):
+    cutoff = prediction_index - pd.Timedelta(days=forecast_horizon_days)
+    training_features = features.loc[features.index < cutoff]
+    training_labels = labels.loc[labels.index < cutoff]
+    training_data = training_features.copy()
+    training_data["downside_risk"] = training_labels
     training_data = training_data.dropna()
 
     if len(training_data) < min_training_rows:
@@ -620,6 +629,7 @@ def run_and_persist_ml_price_floor_variant_analysis(
         features,
         labels,
         min_training_rows=min_training_rows,
+        forecast_horizon_days=forecast_horizon_days,
     )
     signals = apply_ml_price_floor_filter_to_signals(
         baseline_signals,
@@ -631,7 +641,13 @@ def run_and_persist_ml_price_floor_variant_analysis(
     summary = summarize_backtest(results)
     metrics = _metric_subset(summary)
     regime_analysis = compute_volatility_regime_analysis(results)
-    coefficients = _final_ml_coefficients(features, labels, min_training_rows)
+    coefficients = _final_ml_coefficients(
+        features,
+        labels,
+        min_training_rows,
+        forecast_horizon_days,
+        prices.index[-1],
+    )
 
     results_output = results.rename_axis("date").reset_index()
     results_output = results_output[

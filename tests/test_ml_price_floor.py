@@ -157,11 +157,18 @@ def test_walk_forward_predictions_invalid_inputs_raise():
             labels,
             min_training_rows=0,
         )
+    with pytest.raises(ValueError, match="forecast_horizon_days must be greater than 0."):
+        compute_walk_forward_downside_risk_predictions(
+            features,
+            labels,
+            forecast_horizon_days=0,
+        )
 
 
-def test_walk_forward_predictions_do_not_train_on_current_or_future_rows(monkeypatch):
-    features, labels = _prediction_inputs(periods=7)
+def test_walk_forward_predictions_do_not_train_on_unavailable_label_rows(monkeypatch):
+    features, labels = _prediction_inputs(periods=10)
     fit_indexes = []
+    forecast_horizon_days = 2
 
     class FakeLogisticRegression:
         def __init__(self, max_iter, random_state):
@@ -183,13 +190,15 @@ def test_walk_forward_predictions_do_not_train_on_current_or_future_rows(monkeyp
         features,
         labels,
         min_training_rows=2,
+        forecast_horizon_days=forecast_horizon_days,
     )
 
     predicted_indexes = list(predictions.dropna().index)
     assert predicted_indexes
     assert len(fit_indexes) == len(predicted_indexes)
     for training_index, prediction_index in zip(fit_indexes, predicted_indexes, strict=True):
-        assert training_index.max() < prediction_index
+        cutoff = prediction_index - pd.Timedelta(days=forecast_horizon_days)
+        assert training_index.max() < cutoff
 
 
 def test_apply_ml_price_floor_filter_to_signals_filters_entries_and_preserves_exits():

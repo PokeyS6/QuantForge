@@ -61,6 +61,7 @@ def compute_walk_forward_downside_risk_predictions(
     features: pd.DataFrame,
     labels: pd.Series,
     min_training_rows: int = 252,
+    forecast_horizon_days: int = 5,
 ) -> pd.Series:
     """Compute walk-forward downside-risk probabilities without lookahead."""
     if features.empty:
@@ -71,11 +72,14 @@ def compute_walk_forward_downside_risk_predictions(
         raise ValueError("Features and labels indexes must match.")
     if min_training_rows <= 0:
         raise ValueError("min_training_rows must be greater than 0.")
+    if forecast_horizon_days <= 0:
+        raise ValueError("forecast_horizon_days must be greater than 0.")
 
     predictions = pd.Series(float("nan"), index=features.index, name="p_downside_risk")
-    for row_number, row_label in enumerate(features.index):
-        training_features = features.iloc[:row_number]
-        training_labels = labels.iloc[:row_number]
+    for row_label in features.index:
+        cutoff = row_label - pd.Timedelta(days=forecast_horizon_days)
+        training_features = features.loc[features.index < cutoff]
+        training_labels = labels.loc[labels.index < cutoff]
         training_data = training_features.copy()
         training_data["downside_risk"] = training_labels
         training_data = training_data.dropna()
