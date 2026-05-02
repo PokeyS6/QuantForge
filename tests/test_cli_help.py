@@ -112,15 +112,27 @@ def _comparison_metrics(total_return: float = 0.1):
 def _write_compare_inputs(project_file):
     project_root = project_file.parent
     reports_dir = project_root / "reports"
-    variant_dir = project_root / "variants" / "variant_001_volatility_filter"
+    baseline_variant_dir = project_root / "variants" / "baseline"
+    volatility_variant_dir = project_root / "variants" / "variant_001_volatility_filter"
+    ml_variant_dir = project_root / "variants" / "variant_002_ml_price_floor"
     reports_dir.mkdir(parents=True)
-    variant_dir.mkdir(parents=True)
+    baseline_variant_dir.mkdir(parents=True, exist_ok=True)
+    volatility_variant_dir.mkdir(parents=True)
+    ml_variant_dir.mkdir(parents=True)
     (reports_dir / "baseline_metrics.json").write_text(
         json.dumps(_comparison_metrics(total_return=0.1)) + "\n",
         encoding="utf-8",
     )
-    (variant_dir / "metrics.json").write_text(
+    (baseline_variant_dir / "metrics.json").write_text(
+        json.dumps(_comparison_metrics(total_return=0.25)) + "\n",
+        encoding="utf-8",
+    )
+    (volatility_variant_dir / "metrics.json").write_text(
         json.dumps(_comparison_metrics(total_return=0.15)) + "\n",
+        encoding="utf-8",
+    )
+    (ml_variant_dir / "metrics.json").write_text(
+        json.dumps(_comparison_metrics(total_return=0.05)) + "\n",
         encoding="utf-8",
     )
     return project_root
@@ -375,8 +387,15 @@ def test_compare_all_variants_writes_report_and_prints_preview(tmp_path):
 
     assert result.exit_code == 0
     assert report_path.exists()
+    assert "## Baseline vs baseline" not in report
+    assert "Baseline vs baseline" not in result.output
+    assert "## Baseline vs variant_001_volatility_filter" in report
+    assert "## Baseline vs variant_002_ml_price_floor" in report
+    assert "Baseline vs variant_001_volatility_filter" in result.output
+    assert "Baseline vs variant_002_ml_price_floor" in result.output
     assert "Metric | Baseline | Variant | Change" in result.output
-    assert result.output.count("- ") == 3
+    assert result.output.count("| Metric | Baseline | Variant | Change |") >= 2
+    assert result.output.count("- ") == 6
     assert "- total_return increased by 0.050000." in result.output
     for forbidden_word in forbidden_words:
         assert forbidden_word not in result.output.lower()

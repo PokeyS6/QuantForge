@@ -191,19 +191,35 @@ def compare(
 
 def _print_comparison_preview(report: str) -> None:
     lines = report.splitlines()
-    table_start = next(
-        index for index, line in enumerate(lines) if line == "| Metric | Baseline | Variant | Change |"
-    )
-    table_end = table_start
-    while table_end < len(lines) and lines[table_end].startswith("|"):
-        typer.echo(lines[table_end])
-        table_end += 1
+    section_indexes = [
+        index for index, line in enumerate(lines) if line.startswith("## Baseline vs ")
+    ]
+    for section_number, section_start in enumerate(section_indexes):
+        section_end = (
+            section_indexes[section_number + 1]
+            if section_number + 1 < len(section_indexes)
+            else len(lines)
+        )
+        section_lines = lines[section_start:section_end]
 
-    observation_start = next(
-        index for index, line in enumerate(lines) if line == "### Observations"
-    )
-    observations = [
-        line for line in lines[observation_start + 1 :] if line.startswith("- ")
-    ][:3]
-    for observation in observations:
-        typer.echo(observation)
+        typer.echo(section_lines[0].removeprefix("## "))
+        table_start = next(
+            index
+            for index, line in enumerate(section_lines)
+            if line == "| Metric | Baseline | Variant | Change |"
+        )
+        table_end = table_start
+        while table_end < len(section_lines) and section_lines[table_end].startswith("|"):
+            typer.echo(section_lines[table_end])
+            table_end += 1
+
+        observation_start = next(
+            index for index, line in enumerate(section_lines) if line == "### Observations"
+        )
+        observations = [
+            line
+            for line in section_lines[observation_start + 1 :]
+            if line.startswith("- ")
+        ][:3]
+        for observation in observations:
+            typer.echo(observation)
