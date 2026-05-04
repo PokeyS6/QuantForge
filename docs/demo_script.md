@@ -1,25 +1,37 @@
 # Demo Script
 
-This is the intended first QuantForge demo. It is a product walkthrough, not an
-implemented workflow yet.
+The current QuantForge demo is a one-command CLI run that creates a local
+project, analyzes a baseline, creates two variants, analyzes both variants, and
+writes comparison artifacts.
 
-## First Demo Flow
+## Run
 
-1. Create an RSI strategy on AAPL.
-2. Run a baseline backtest.
-3. Diagnose a weakness during high-volatility periods.
-4. Add a volatility-filter variant.
-5. Show the change summary or code diff.
-6. Compare baseline vs variant.
-7. Later, add an ML price-floor variant.
-8. Validate the ML variant with walk-forward validation.
-9. End with a non-advisory interpretation.
+```bash
+python scripts/run_real_data_demo.py --ticker SPY --start 2018-01-01
+```
+
+If yfinance/Yahoo Finance rate-limits the request, use a local OHLCV CSV:
+
+```bash
+python scripts/run_real_data_demo.py --ticker SPY --start 2018-01-01 --data-csv path/to/spy_ohlcv.csv
+```
+
+## Narrative
+
+The demo compares three historical analyses:
+
+- Baseline: RSI mean-reversion hypothesis.
+- Volatility filter: blocks entries during high-volatility regimes.
+- ML price floor: blocks entries when walk-forward downside-risk probability is above the configured threshold.
+
+The comparison should focus on tradeoffs: participation, exposure, trade count,
+drawdown, and total return changed across variants. These changes are historical
+test results, not trading instructions.
+In practice, filters can reduce participation without eliminating downside risk.
 
 ## Closing Interpretation
 
-The demo should frame results as experimental evidence:
-
-"In this test window, the volatility-filter variant reduced exposure during
-high-volatility periods and changed the drawdown profile. This is not a trading
-recommendation. QuantForge helps test user-provided hypotheses; it does not
-provide trading advice."
+QuantForge evaluates strategy behavior and tradeoffs for a user-provided
+hypothesis. Filters can reduce participation and change risk exposure, but they
+do not guarantee lower drawdown or future performance. No strategy
+recommendation is being made.

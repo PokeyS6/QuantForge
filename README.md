@@ -1,8 +1,10 @@
 # QuantForge
 
-QuantForge is a local-first, CLI-first AI-assisted quantitative strategy workbench.
-It is intended to help technical users build, modify, backtest, validate, compare,
-and audit trading strategy variants.
+QuantForge is a local-first, CLI-first system to evaluate strategy behavior and
+tradeoffs. It is intended to help technical users build, modify, backtest,
+validate, compare, and audit trading strategy variants.
+It evaluates how strategy variants behave on historical data; it does not
+predict future outcomes.
 
 QuantForge helps test user-provided hypotheses. It does not provide trading advice.
 
@@ -20,14 +22,13 @@ QuantForge is not:
 
 ## Current Status
 
-QuantForge is currently a skeleton only. The repository contains packaging, import
-tests, and a placeholder CLI shell. It does not yet implement strategy logic,
-backtesting, data fetching, variants, ML, reports, dashboards, cloud services,
-accounts, payments, or broker execution.
+QuantForge currently supports a local RSI baseline workflow, a volatility-filter
+variant, an ML price-floor variant, persisted analysis artifacts, and comparison
+reports. It remains local-first and CLI-only.
 
 ## CLI
 
-Current placeholder commands:
+Current commands:
 
 ```bash
 quantforge create
@@ -36,9 +37,28 @@ quantforge modify
 quantforge compare
 ```
 
-Each command currently prints a short non-advisory placeholder message.
+The commands create local projects, run historical analyses from local CSV data,
+create supported variants, and compare persisted metrics.
 
-## Planned First Demo Loop
+## Real-Data Demo
+
+Run the current end-to-end demo with real historical OHLCV data:
+
+```bash
+python scripts/run_real_data_demo.py --ticker SPY --start 2018-01-01
+```
+
+If Yahoo/yfinance rate-limits the request, provide a local CSV:
+
+```bash
+python scripts/run_real_data_demo.py --ticker SPY --start 2018-01-01 --data-csv path/to/spy_ohlcv.csv
+```
+
+The runner creates a project, analyzes the baseline, creates and analyzes the
+volatility and ML variants, runs comparison, and writes
+`real_data_demo_report.md` under the output directory.
+
+## Demo Loop
 
 The intended first demo follows the core product loop:
 
@@ -47,9 +67,9 @@ Build strategy -> Backtest baseline -> Diagnose weaknesses -> Modify strategy
 -> Create variant -> Validate variant -> Compare against baseline -> Repeat
 ```
 
-The first planned walkthrough uses an RSI strategy on AAPL, compares a baseline
-against a volatility-filter variant, and later introduces an ML price-floor
-variant with walk-forward validation.
+The current walkthrough compares an RSI baseline against a volatility-filter
+variant and an ML price-floor variant. The focus is how filters change
+participation, exposure, drawdown, and trade count in a historical test window.
 
 See [Product Boundary](docs/product_boundary.md) and
 [Demo Script](docs/demo_script.md) for the practical guardrails and demo plan.
