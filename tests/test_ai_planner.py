@@ -1,6 +1,11 @@
 import pytest
 
-from quantforge.ai.planner import build_planner_prompt
+from quantforge.ai.planner import (
+    LOCAL_AI_UNAVAILABLE_MESSAGE,
+    LocalAIPlannerUnavailable,
+    build_planner_prompt,
+    generate_modification_spec,
+)
 
 
 REQUIRED_CONSTRAINTS = [
@@ -123,3 +128,107 @@ def test_invalid_parent_variant_id_raises():
         build_planner_prompt("Add a volatility filter", parent_variant_id="")
     with pytest.raises(ValueError, match="parent_variant_id must be a non-empty string"):
         build_planner_prompt("Add a volatility filter", parent_variant_id=None)
+
+
+def test_generate_modification_spec_missing_model_raises(monkeypatch):
+    monkeypatch.delenv("QUANTFORGE_LOCAL_LLM_MODEL", raising=False)
+
+    with pytest.raises(LocalAIPlannerUnavailable, match=LOCAL_AI_UNAVAILABLE_MESSAGE):
+        generate_modification_spec("Add a volatility filter")
+
+
+def test_generate_modification_spec_empty_model_raises(monkeypatch):
+    monkeypatch.setenv("QUANTFORGE_LOCAL_LLM_MODEL", "  ")
+
+    with pytest.raises(LocalAIPlannerUnavailable, match=LOCAL_AI_UNAVAILABLE_MESSAGE):
+        generate_modification_spec("Add a volatility filter")
+
+
+def test_generate_modification_spec_failed_subprocess_raises(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return subprocess_result(stdout="", stderr="failed", returncode=1)
+
+    monkeypatch.setenv("QUANTFORGE_LOCAL_LLM_MODEL", "llama3")
+    monkeypatch.setattr("quantforge.ai.planner.subprocess.run", fake_run)
+
+    with pytest.raises(LocalAIPlannerUnavailable, match=LOCAL_AI_UNAVAILABLE_MESSAGE):
+        generate_modification_spec("Add a volatility filter")
+
+
+def test_generate_modification_spec_missing_ollama_raises(monkeypatch):
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("ollama")
+
+    monkeypatch.setenv("QUANTFORGE_LOCAL_LLM_MODEL", "llama3")
+    monkeypatch.setattr("quantforge.ai.planner.subprocess.run", fake_run)
+
+    with pytest.raises(LocalAIPlannerUnavailable, match=LOCAL_AI_UNAVAILABLE_MESSAGE):
+        generate_modification_spec("Add a volatility filter")
+
+
+def test_generate_modification_spec_blank_stdout_raises(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return subprocess_result(stdout=" \n ", stderr="", returncode=0)
+
+    monkeypatch.setenv("QUANTFORGE_LOCAL_LLM_MODEL", "llama3")
+    monkeypatch.setattr("quantforge.ai.planner.subprocess.run", fake_run)
+
+    with pytest.raises(LocalAIPlannerUnavailable, match=LOCAL_AI_UNAVAILABLE_MESSAGE):
+        generate_modification_spec("Add a volatility filter")
+
+
+def test_generate_modification_spec_success_returns_raw_string(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return subprocess_result(stdout="  not json but raw output  \n", stderr="", returncode=0)
+
+    monkeypatch.setenv("QUANTFORGE_LOCAL_LLM_MODEL", "llama3")
+    monkeypatch.setattr("quantforge.ai.planner.subprocess.run", fake_run)
+
+    assert generate_modification_spec("Add a volatility filter") == "not json but raw output"
+
+
+def test_generate_modification_spec_sends_prompt_to_stdin(monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess_result(stdout='{"supported": false}', stderr="", returncode=0)
+
+    monkeypatch.setenv("QUANTFORGE_LOCAL_LLM_MODEL", "llama3")
+    monkeypatch.setattr("quantforge.ai.planner.subprocess.run", fake_run)
+
+    generate_modification_spec("Add a momentum filter", parent_variant_id="variant_123")
+
+    command, kwargs = calls[0]
+    assert command == ["ollama", "run", "llama3"]
+    assert "You are the QuantForge AI modification planner." in kwargs["input"]
+    assert "user_instruction: Add a momentum filter" in kwargs["input"]
+    assert "parent_variant_id: variant_123" in kwargs["input"]
+    assert kwargs["capture_output"] is True
+    assert kwargs["text"] is True
+    assert kwargs["check"] is False
+
+
+def test_generate_modification_spec_does_not_parse_json_or_validate_output(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return subprocess_result(
+            stdout="unsupported text that is not json and not schema-valid",
+            stderr="",
+            returncode=0,
+        )
+
+    monkeypatch.setenv("QUANTFORGE_LOCAL_LLM_MODEL", "llama3")
+    monkeypatch.setattr("quantforge.ai.planner.subprocess.run", fake_run)
+
+    assert (
+        generate_modification_spec("Add a volatility filter")
+        == "unsupported text that is not json and not schema-valid"
+    )
+
+
+def subprocess_result(stdout: str, stderr: str, returncode: int):
+    return type(
+        "CompletedProcessStub",
+        (),
+        {"stdout": stdout, "stderr": stderr, "returncode": returncode},
+    )()

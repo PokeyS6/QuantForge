@@ -1,6 +1,18 @@
 """Deterministic prompt construction for the local AI modification planner."""
 
 import json
+import os
+import subprocess
+
+
+LOCAL_AI_UNAVAILABLE_MESSAGE = (
+    "ERROR: Local AI planner unavailable. Configure a local model before using "
+    "AI-assisted modifications."
+)
+
+
+class LocalAIPlannerUnavailable(RuntimeError):
+    """Raised when the local Ollama planner cannot be used."""
 
 
 def build_planner_prompt(user_instruction: str, parent_variant_id: str = "baseline") -> str:
@@ -92,3 +104,31 @@ def build_planner_prompt(user_instruction: str, parent_variant_id: str = "baseli
             f"user_instruction: {user_instruction}",
         ]
     )
+
+
+def generate_modification_spec(
+    user_instruction: str,
+    parent_variant_id: str = "baseline",
+) -> str:
+    """Call local Ollama and return the raw planner output."""
+    model = os.environ.get("QUANTFORGE_LOCAL_LLM_MODEL", "").strip()
+    if not model:
+        raise LocalAIPlannerUnavailable(LOCAL_AI_UNAVAILABLE_MESSAGE)
+
+    prompt = build_planner_prompt(user_instruction, parent_variant_id)
+    try:
+        result = subprocess.run(
+            ["ollama", "run", model],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise LocalAIPlannerUnavailable(LOCAL_AI_UNAVAILABLE_MESSAGE) from error
+
+    output = result.stdout.strip()
+    if result.returncode != 0 or not output:
+        raise LocalAIPlannerUnavailable(LOCAL_AI_UNAVAILABLE_MESSAGE)
+
+    return output
