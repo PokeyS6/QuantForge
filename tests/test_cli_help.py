@@ -343,7 +343,7 @@ def test_analyze_unsupported_variant_id_exits_nonzero(tmp_path):
     )
 
     assert result.exit_code != 0
-    assert result.output == "ERROR: Unsupported variant id: variant_unknown\n"
+    assert result.output == "ERROR: Variant variant_unknown not found.\n"
 
 
 def test_analyze_variant_helper_value_error_is_surfaced(tmp_path):

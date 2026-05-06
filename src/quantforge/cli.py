@@ -7,6 +7,7 @@ from typing import Optional
 import typer
 
 from quantforge.ai.artifacts import create_ai_variant_artifacts
+from quantforge.ai.backtest import run_and_persist_ai_momentum_variant_analysis
 from quantforge.ai.planner import LocalAIPlannerUnavailable, generate_modification_spec
 from quantforge.ai.schema import ModificationSpecValidationError, validate_schema
 from quantforge.ai.validator import validate_against_registry
@@ -82,10 +83,16 @@ def analyze(
         elif variant_id == "variant_002_ml_price_floor":
             analysis_runner = run_and_persist_ml_price_floor_variant_analysis
         else:
-            typer.echo(f"ERROR: Unsupported variant id: {variant_id}")
-            raise typer.Exit(code=1)
+            try:
+                analysis_runner = _ai_variant_analysis_runner(project_file, variant_id)
+            except ValueError as error:
+                typer.echo(str(error))
+                raise typer.Exit(code=1) from error
         try:
-            analysis_runner(project_file, data_csv)
+            if analysis_runner == run_and_persist_ai_momentum_variant_analysis:
+                analysis_runner(project_file, data_csv, variant_id)
+            else:
+                analysis_runner(project_file, data_csv)
         except ValueError as error:
             typer.echo(str(error))
             raise typer.Exit(code=1) from error
@@ -129,6 +136,25 @@ def analyze(
     typer.echo(f"baseline_variant_id: {project.get('baseline_variant_id')}")
     typer.echo(f"variants: {len(project.get('variants', []))}")
     typer.echo(NON_ADVISORY_NOTE)
+
+
+def _ai_variant_analysis_runner(project_file: Path, variant_id: str):
+    variant_dir = project_file.parent / "variants" / variant_id
+    variant_config_path = variant_dir / "strategy_config.json"
+    if not variant_dir.exists():
+        raise ValueError(f"ERROR: Variant {variant_id} not found.")
+    if not variant_config_path.exists():
+        raise ValueError(f"Variant config not found: {variant_config_path}")
+
+    variant_config = json.loads(variant_config_path.read_text(encoding="utf-8"))
+    modification_type = variant_config.get("modification_type")
+    if modification_type == "momentum_filter":
+        return run_and_persist_ai_momentum_variant_analysis
+
+    raise ValueError(
+        f"ERROR: Backtesting for AI modification type '{modification_type}' "
+        "is not supported yet."
+    )
 
 
 @app.command()
