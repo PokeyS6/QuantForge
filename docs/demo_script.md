@@ -29,6 +29,23 @@ drawdown, and total return changed across variants. These changes are historical
 test results, not trading instructions.
 In practice, filters can reduce participation without eliminating downside risk.
 
+## Optional AI-Assisted Modification Demo
+
+For student validation demos, AI-assisted modifications require local Ollama
+setup. QuantForge sends the user prompt to a local model, validates the returned
+JSON spec, and then uses deterministic builders to create auditable variant
+artifacts. The AI does not generate executable strategy code.
+
+```bash
+export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
+quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
+```
+
+If Ollama or the selected model is unavailable, the AI planner should fail
+clearly. Non-AI commands and hardcoded modification workflows should still work.
+
+See [AI Ollama Setup](ai_ollama_setup.md).
+
 ## Closing Interpretation
 
 QuantForge evaluates strategy behavior and tradeoffs for a user-provided

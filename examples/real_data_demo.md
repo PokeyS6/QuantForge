@@ -31,3 +31,23 @@ output directory is safe to delete after inspection.
 
 This runner is demo/validation tooling. It uses historical data for research and
 does not provide financial advice or trading recommendations.
+
+## Optional AI Setup
+
+The real-data runner does not require AI assistance. If you want to demonstrate
+`quantforge modify --ai`, configure a local Ollama model first:
+
+```bash
+export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
+quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
+```
+
+AI-assisted modification planning follows this local boundary:
+
+```text
+user prompt -> local LLM -> validated JSON spec -> deterministic builder -> auditable variant
+```
+
+If Ollama or the model is unavailable, the AI planner should fail clearly.
+Non-AI workflows should still work. The AI does not generate executable strategy
+code, recommend trades, or optimize strategies.

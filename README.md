@@ -8,6 +8,11 @@ predict future outcomes.
 
 QuantForge helps test user-provided hypotheses. It does not provide trading advice.
 
+AI-assisted modifications are local-first. They use a local Ollama model to
+turn a user prompt into a validated JSON specification, then QuantForge's
+deterministic builder creates auditable variant artifacts. The AI does not
+generate executable strategy code.
+
 ## What QuantForge Is Not
 
 QuantForge is not:
@@ -39,6 +44,27 @@ quantforge compare
 
 The commands create local projects, run historical analyses from local CSV data,
 create supported variants, and compare persisted metrics.
+
+## AI-Assisted Modifications
+
+The `--ai` workflow requires Ollama and a local model name:
+
+```bash
+export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
+quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
+```
+
+Pipeline:
+
+```text
+user prompt -> local LLM -> validated JSON spec -> deterministic builder -> auditable variant
+```
+
+If Ollama or the selected model is unavailable, the planner fails clearly and no
+AI-assisted variant is created. Non-AI workflows continue to work without
+Ollama.
+
+See [AI Ollama Setup](docs/ai_ollama_setup.md) for setup and validation steps.
 
 ## Real-Data Demo
 

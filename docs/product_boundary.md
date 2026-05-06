@@ -8,6 +8,11 @@ QuantForge does not provide trading advice. It does not make buy/sell
 recommendations, place live trades, connect to brokers for execution, promise
 profitable outcomes, or provide performance guarantees.
 
+AI-assisted modification planning is local-first. QuantForge can use a local
+Ollama model to turn a user prompt into a validated JSON spec, but the AI does
+not generate executable strategy code. QuantForge's deterministic builders
+create the auditable variant artifacts.
+
 ## Operating Principles
 
 - Users provide the strategy hypothesis and decide what to test.
@@ -21,6 +26,8 @@ profitable outcomes, or provide performance guarantees.
 - Results should be framed as evidence from a test, not as instructions to trade.
 - Filters can reduce participation or change exposure; they do not guarantee
   lower drawdown.
+- AI-assisted workflow boundary: user prompt -> local LLM -> validated JSON
+  spec -> deterministic builder -> auditable variant.
 
 ## Safe Language Examples
 
