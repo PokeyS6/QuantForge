@@ -182,8 +182,8 @@ def test_walk_forward_predictions_do_not_train_on_unavailable_label_rows(monkeyp
             return [[0.25, 0.75]]
 
     monkeypatch.setattr(
-        "quantforge.ml.price_floor.LogisticRegression",
-        FakeLogisticRegression,
+        "quantforge.ml.price_floor._logistic_regression_model",
+        lambda: FakeLogisticRegression(max_iter=1000, random_state=42),
     )
 
     predictions = compute_walk_forward_downside_risk_predictions(

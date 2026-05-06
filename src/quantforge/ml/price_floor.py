@@ -1,7 +1,6 @@
 """Feature and label helpers for the ML price-floor variant."""
 
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
 
 
 FEATURE_COLUMNS = [
@@ -12,6 +11,12 @@ FEATURE_COLUMNS = [
     "distance_from_sma_20",
 ]
 SIGNAL_COLUMNS = ["close", "rsi", "entry_signal", "exit_signal"]
+
+
+def _logistic_regression_model():
+    from sklearn.linear_model import LogisticRegression
+
+    return LogisticRegression(max_iter=1000, random_state=42)
 
 
 def _validate_prices(prices: pd.DataFrame) -> None:
@@ -95,7 +100,7 @@ def compute_walk_forward_downside_risk_predictions(
         if current_features.isna().any(axis=None):
             continue
 
-        model = LogisticRegression(max_iter=1000, random_state=42)
+        model = _logistic_regression_model()
         model.fit(training_data[features.columns], y_train)
         class_index = list(model.classes_).index(1.0)
         predictions.loc[row_label] = model.predict_proba(current_features)[0][class_index]
