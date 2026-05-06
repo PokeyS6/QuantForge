@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import pytest
 
+import quantforge.ai.backtest as ai_backtest
 from quantforge.ai.backtest import run_and_persist_ai_momentum_variant_analysis
 
 
@@ -160,6 +161,16 @@ def output_paths(variant_dir):
 
 def assert_no_outputs(variant_dir):
     assert not any(path.exists() for path in output_paths(variant_dir))
+
+
+def temp_paths(variant_dir):
+    return [
+        variant_dir / ".backtest_results.csv.tmp",
+        variant_dir / ".signals.csv.tmp",
+        variant_dir / ".metrics.json.tmp",
+        variant_dir / ".report.md.tmp",
+        variant_dir / ".change_summary.json.tmp",
+    ]
 
 
 def test_successful_momentum_backtest_writes_all_outputs(ai_momentum_project):
@@ -382,6 +393,90 @@ def test_overwrite_protection_raises(ai_momentum_project):
             ai_momentum_project["data_csv"],
             variant_dir.name,
         )
+
+
+def test_forced_failure_during_persistence_leaves_no_output_files(
+    ai_momentum_project,
+    monkeypatch,
+):
+    variant_dir = ai_momentum_project["variant_dir"]
+    original_replace = ai_backtest._replace_temp_file
+    replace_calls = []
+
+    def failing_replace(temp_path, final_path):
+        original_replace(temp_path, final_path)
+        replace_calls.append(final_path)
+        if final_path.name == "signals.csv":
+            raise RuntimeError("forced persistence failure")
+
+    monkeypatch.setattr(ai_backtest, "_replace_temp_file", failing_replace)
+
+    with pytest.raises(RuntimeError, match="forced persistence failure"):
+        run_and_persist_ai_momentum_variant_analysis(
+            ai_momentum_project["project_file"],
+            ai_momentum_project["data_csv"],
+            variant_dir.name,
+        )
+
+    assert [path.name for path in replace_calls] == ["backtest_results.csv", "signals.csv"]
+    assert_no_outputs(variant_dir)
+    assert not any(path.exists() for path in temp_paths(variant_dir))
+
+
+def test_forced_failure_during_persistence_preserves_change_summary_exactly(
+    ai_momentum_project,
+    monkeypatch,
+):
+    variant_dir = ai_momentum_project["variant_dir"]
+    change_summary_path = variant_dir / "change_summary.json"
+    original_change_summary = change_summary_path.read_text(encoding="utf-8")
+    original_replace = ai_backtest._replace_temp_file
+
+    def failing_replace(temp_path, final_path):
+        original_replace(temp_path, final_path)
+        if final_path.name == "change_summary.json":
+            raise RuntimeError("forced change summary failure")
+
+    monkeypatch.setattr(ai_backtest, "_replace_temp_file", failing_replace)
+
+    with pytest.raises(RuntimeError, match="forced change summary failure"):
+        run_and_persist_ai_momentum_variant_analysis(
+            ai_momentum_project["project_file"],
+            ai_momentum_project["data_csv"],
+            variant_dir.name,
+        )
+
+    assert change_summary_path.read_text(encoding="utf-8") == original_change_summary
+    assert_no_outputs(variant_dir)
+    assert not any(path.exists() for path in temp_paths(variant_dir))
+
+
+def test_overwrite_protection_triggers_before_temp_files_are_written(
+    ai_momentum_project,
+    monkeypatch,
+):
+    variant_dir = ai_momentum_project["variant_dir"]
+    (variant_dir / "metrics.json").write_text("{}\n", encoding="utf-8")
+
+    def fail_if_replace_called(temp_path, final_path):
+        raise AssertionError("replace should not be called during overwrite precheck")
+
+    monkeypatch.setattr(ai_backtest, "_replace_temp_file", fail_if_replace_called)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "ERROR: Variant analysis already exists for "
+            "variant_003_momentum_filter. Refusing to overwrite."
+        ),
+    ):
+        run_and_persist_ai_momentum_variant_analysis(
+            ai_momentum_project["project_file"],
+            ai_momentum_project["data_csv"],
+            variant_dir.name,
+        )
+
+    assert not any(path.exists() for path in temp_paths(variant_dir))
 
 
 def test_baseline_outputs_are_not_modified(ai_momentum_project):

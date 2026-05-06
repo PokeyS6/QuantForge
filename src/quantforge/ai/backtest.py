@@ -36,6 +36,7 @@ def run_and_persist_ai_momentum_variant_analysis(
     metrics_path = variant_dir / "metrics.json"
     report_path = variant_dir / "report.md"
     change_summary_path = variant_dir / "change_summary.json"
+    final_output_paths = [results_path, signals_path, metrics_path, report_path]
 
     if not baseline_results_path.exists():
         raise ValueError("ERROR: Baseline analysis not found. Run 'quantforge analyze' first.")
@@ -43,7 +44,7 @@ def run_and_persist_ai_momentum_variant_analysis(
         raise ValueError(f"ERROR: Variant {variant_id} not found.")
     if not variant_config_path.exists():
         raise ValueError(f"Variant config not found: {variant_config_path}")
-    if results_path.exists() or metrics_path.exists() or report_path.exists():
+    if any(path.exists() for path in final_output_paths):
         raise ValueError(
             f"ERROR: Variant analysis already exists for {variant_id}. Refusing to overwrite."
         )
@@ -61,6 +62,7 @@ def run_and_persist_ai_momentum_variant_analysis(
     lookback_days = _require_parameter(parameters, "lookback_days")
     threshold = _require_parameter(parameters, "threshold")
     baseline_parameters = _baseline_rsi_parameters(project)
+    original_change_summary_text = _read_optional_text(change_summary_path)
     change_summary = _read_change_summary(change_summary_path)
 
     prices = load_ohlcv_csv(data_csv)
@@ -101,26 +103,51 @@ def run_and_persist_ai_momentum_variant_analysis(
     ]
     signals_output = signals_output.sort_values("date").dropna()
 
-    results_output.to_csv(results_path, index=False)
-    signals_output.to_csv(signals_path, index=False)
-    metrics_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
-
     change_summary["status"] = "backtested"
-    change_summary_path.write_text(
-        json.dumps(change_summary, indent=2) + "\n",
-        encoding="utf-8",
+    report_text = _momentum_report_markdown(
+        variant_id=variant_id,
+        lookback_days=lookback_days,
+        threshold=threshold,
+        metrics=metrics,
+        assumptions=change_summary.get("assumptions", []),
+        warnings=change_summary.get("warnings", []),
     )
-    report_path.write_text(
-        _momentum_report_markdown(
-            variant_id=variant_id,
-            lookback_days=lookback_days,
-            threshold=threshold,
-            metrics=metrics,
-            assumptions=change_summary.get("assumptions", []),
-            warnings=change_summary.get("warnings", []),
-        ),
-        encoding="utf-8",
-    )
+    temp_paths = {
+        results_path: variant_dir / ".backtest_results.csv.tmp",
+        signals_path: variant_dir / ".signals.csv.tmp",
+        metrics_path: variant_dir / ".metrics.json.tmp",
+        report_path: variant_dir / ".report.md.tmp",
+        change_summary_path: variant_dir / ".change_summary.json.tmp",
+    }
+    try:
+        results_output.to_csv(temp_paths[results_path], index=False)
+        signals_output.to_csv(temp_paths[signals_path], index=False)
+        temp_paths[metrics_path].write_text(
+            json.dumps(metrics, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temp_paths[report_path].write_text(report_text, encoding="utf-8")
+        temp_paths[change_summary_path].write_text(
+            json.dumps(change_summary, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        for final_path in [
+            results_path,
+            signals_path,
+            metrics_path,
+            report_path,
+            change_summary_path,
+        ]:
+            _replace_temp_file(temp_paths[final_path], final_path)
+    except Exception:
+        _cleanup_failed_persistence(
+            temp_paths=list(temp_paths.values()),
+            final_output_paths=final_output_paths,
+            change_summary_path=change_summary_path,
+            original_change_summary_text=original_change_summary_text,
+        )
+        raise
 
     return metrics
 
@@ -143,6 +170,33 @@ def _read_change_summary(change_summary_path: Path) -> dict:
     if not change_summary_path.exists():
         return {"assumptions": [], "warnings": [], "status": "created_not_backtested"}
     return json.loads(change_summary_path.read_text(encoding="utf-8"))
+
+
+def _read_optional_text(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def _replace_temp_file(temp_path: Path, final_path: Path) -> None:
+    temp_path.replace(final_path)
+
+
+def _cleanup_failed_persistence(
+    temp_paths: list[Path],
+    final_output_paths: list[Path],
+    change_summary_path: Path,
+    original_change_summary_text: str | None,
+) -> None:
+    for temp_path in temp_paths:
+        temp_path.unlink(missing_ok=True)
+    for final_path in final_output_paths:
+        final_path.unlink(missing_ok=True)
+
+    if original_change_summary_text is None:
+        change_summary_path.unlink(missing_ok=True)
+    else:
+        change_summary_path.write_text(original_change_summary_text, encoding="utf-8")
 
 
 def _momentum_report_markdown(
