@@ -1,10 +1,15 @@
 """Command-line interface for QuantForge."""
 
+import json
 from pathlib import Path
 from typing import Optional
 
 import typer
 
+from quantforge.ai.artifacts import create_ai_variant_artifacts
+from quantforge.ai.planner import LocalAIPlannerUnavailable, generate_modification_spec
+from quantforge.ai.schema import ModificationSpecValidationError, validate_schema
+from quantforge.ai.validator import validate_against_registry
 from quantforge.backtest.engine import run_and_persist_baseline_analysis
 from quantforge.core.models import new_rsi_project
 from quantforge.core.paths import project_dir
@@ -130,8 +135,17 @@ def analyze(
 def modify(
     project_file: Path = typer.Argument(..., help="Path to strategy.qf.json."),
     user_instruction: str = typer.Argument(..., help="User-provided modification request."),
+    ai: bool = typer.Option(
+        False,
+        "--ai",
+        help="Use the local AI planner to create a validated modification variant.",
+    ),
 ) -> None:
     """Create a placeholder strategy variant."""
+    if ai:
+        _modify_with_ai(project_file, user_instruction)
+        return
+
     instruction = user_instruction.lower()
     if "volatility filter" in instruction:
         variant_creator = create_volatility_filter_variant
@@ -156,6 +170,56 @@ def modify(
     typer.echo("")
     typer.echo("This variant has not been backtested yet.")
     typer.echo("Variant backtesting will be available in a subsequent step.")
+
+
+def _modify_with_ai(project_file: Path, user_instruction: str) -> None:
+    try:
+        raw_output = generate_modification_spec(
+            user_instruction,
+            parent_variant_id="baseline",
+        )
+    except LocalAIPlannerUnavailable as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+    try:
+        spec = json.loads(raw_output)
+        validate_schema(spec)
+    except (json.JSONDecodeError, ModificationSpecValidationError) as error:
+        _echo_ai_validation_failure()
+        raise typer.Exit(code=1) from error
+
+    if spec["supported"] is False:
+        typer.echo("ERROR: Unsupported AI modification request.")
+        typer.echo(spec["reason"])
+        typer.echo("Suggested supported requests:")
+        for suggestion in spec["suggested_supported_requests"]:
+            typer.echo(f"- {suggestion}")
+        raise typer.Exit(code=1)
+
+    try:
+        validate_against_registry(spec)
+    except ModificationSpecValidationError as error:
+        _echo_ai_validation_failure()
+        raise typer.Exit(code=1) from error
+
+    try:
+        variant_dir = create_ai_variant_artifacts(project_file, spec)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+    typer.echo(f"Creating AI-assisted variant: {variant_dir.name}")
+    typer.echo(f"Modification type: {spec['modification_type']}")
+    typer.echo(f"Rule change: {spec['entry_rule_change']}")
+    typer.echo("")
+    typer.echo("This variant has not been backtested yet.")
+    typer.echo("Variant backtesting will be available in a subsequent step.")
+
+
+def _echo_ai_validation_failure() -> None:
+    typer.echo("ERROR: AI modification spec failed validation.")
+    typer.echo("No variant was created.")
 
 
 @app.command()
