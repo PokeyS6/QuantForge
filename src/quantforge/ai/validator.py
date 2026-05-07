@@ -88,10 +88,20 @@ def _validate_parameter_bounds(parameter_name: str, value, parameter_spec: dict)
     if "min" in parameter_spec and value < parameter_spec["min"]:
         raise ModificationSpecValidationError(
             f"Parameter '{parameter_name}' is out of bounds "
-            f"(expected {parameter_spec['min']}–{parameter_spec['max']}, got {value})"
+            f"(expected {_format_bounds_expectation(parameter_spec)}, got {value})"
         )
     if "max" in parameter_spec and value > parameter_spec["max"]:
         raise ModificationSpecValidationError(
             f"Parameter '{parameter_name}' is out of bounds "
-            f"(expected {parameter_spec['min']}–{parameter_spec['max']}, got {value})"
+            f"(expected {_format_bounds_expectation(parameter_spec)}, got {value})"
         )
+
+
+def _format_bounds_expectation(parameter_spec: dict) -> str:
+    if "min" in parameter_spec and "max" in parameter_spec:
+        return f"{parameter_spec['min']}–{parameter_spec['max']}"
+    if "min" in parameter_spec:
+        return f">= {parameter_spec['min']}"
+    if "max" in parameter_spec:
+        return f"<= {parameter_spec['max']}"
+    return "unbounded"

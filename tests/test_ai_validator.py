@@ -1,7 +1,7 @@
 import pytest
 
 from quantforge.ai.schema import ModificationSpecValidationError
-from quantforge.ai.validator import validate_against_registry
+from quantforge.ai.validator import _validate_parameter_bounds, validate_against_registry
 
 
 def supported_spec(modification_type: str, parameters: dict) -> dict:
@@ -148,6 +148,35 @@ def test_out_of_bounds_parameter_fails():
         match="Parameter 'threshold' is out of bounds",
     ):
         validate_against_registry(spec)
+
+
+def test_bounds_error_formats_both_bounds_unchanged():
+    with pytest.raises(
+        ModificationSpecValidationError,
+        match="Parameter 'lookback_days' is out of bounds "
+        r"\(expected 5–100, got 300\)",
+    ):
+        _validate_parameter_bounds(
+            "lookback_days",
+            300,
+            {"type": "integer", "min": 5, "max": 100},
+        )
+
+
+def test_bounds_error_formats_min_only():
+    with pytest.raises(
+        ModificationSpecValidationError,
+        match=r"Parameter 'x' is out of bounds \(expected >= 5, got 3\)",
+    ):
+        _validate_parameter_bounds("x", 3, {"type": "integer", "min": 5})
+
+
+def test_bounds_error_formats_max_only():
+    with pytest.raises(
+        ModificationSpecValidationError,
+        match=r"Parameter 'x' is out of bounds \(expected <= 100, got 300\)",
+    ):
+        _validate_parameter_bounds("x", 300, {"type": "integer", "max": 100})
 
 
 def test_invalid_enum_value_fails():
