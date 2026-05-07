@@ -8,7 +8,12 @@ import typer
 
 from quantforge.ai.artifacts import create_ai_variant_artifacts
 from quantforge.ai.backtest import run_and_persist_ai_momentum_variant_analysis
-from quantforge.ai.planner import LocalAIPlannerUnavailable, generate_modification_spec
+from quantforge.ai.planner import (
+    LocalAIPlannerOutputError,
+    LocalAIPlannerUnavailable,
+    generate_modification_spec,
+    loads_model_json,
+)
 from quantforge.ai.schema import ModificationSpecValidationError, validate_schema
 from quantforge.ai.validator import validate_against_registry
 from quantforge.backtest.engine import run_and_persist_baseline_analysis
@@ -209,9 +214,14 @@ def _modify_with_ai(project_file: Path, user_instruction: str) -> None:
         raise typer.Exit(code=1) from error
 
     try:
-        spec = json.loads(raw_output)
+        spec = loads_model_json(raw_output)
+    except LocalAIPlannerOutputError as error:
+        _echo_ai_validation_failure(str(error))
+        raise typer.Exit(code=1) from error
+
+    try:
         validate_schema(spec)
-    except (json.JSONDecodeError, ModificationSpecValidationError) as error:
+    except ModificationSpecValidationError as error:
         _echo_ai_validation_failure()
         raise typer.Exit(code=1) from error
 
@@ -243,8 +253,11 @@ def _modify_with_ai(project_file: Path, user_instruction: str) -> None:
     typer.echo("Variant backtesting will be available in a subsequent step.")
 
 
-def _echo_ai_validation_failure() -> None:
-    typer.echo("ERROR: AI modification spec failed validation.")
+def _echo_ai_validation_failure(detail: str | None = None) -> None:
+    if detail:
+        typer.echo(f"ERROR: AI modification spec failed validation: {detail}")
+    else:
+        typer.echo("ERROR: AI modification spec failed validation.")
     typer.echo("No variant was created.")
 
 

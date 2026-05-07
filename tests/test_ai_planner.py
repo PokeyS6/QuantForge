@@ -2,9 +2,11 @@ import pytest
 
 from quantforge.ai.planner import (
     LOCAL_AI_UNAVAILABLE_MESSAGE,
+    LocalAIPlannerOutputError,
     LocalAIPlannerUnavailable,
     build_planner_prompt,
     generate_modification_spec,
+    loads_model_json,
 )
 
 
@@ -224,6 +226,38 @@ def test_generate_modification_spec_does_not_parse_json_or_validate_output(monke
         generate_modification_spec("Add a volatility filter")
         == "unsupported text that is not json and not schema-valid"
     )
+
+
+def test_loads_model_json_repairs_raw_newline_inside_string():
+    raw = """{
+  "schema_version": "0.1",
+  "supported": true,
+  "non_advisory_note": "This modification creates a testable strategy
+variant and does not constitute trading advice."
+}"""
+
+    parsed = loads_model_json(raw)
+
+    assert (
+        parsed["non_advisory_note"]
+        == "This modification creates a testable strategy variant and does not constitute trading advice."
+    )
+
+
+def test_loads_model_json_rejects_unrecoverable_json_with_clear_error():
+    with pytest.raises(
+        LocalAIPlannerOutputError,
+        match="Invalid JSON output from local model",
+    ):
+        loads_model_json("not json")
+
+
+def test_loads_model_json_rejects_non_object_json():
+    with pytest.raises(
+        LocalAIPlannerOutputError,
+        match="expected a JSON object",
+    ):
+        loads_model_json('["not", "an", "object"]')
 
 
 def subprocess_result(stdout: str, stderr: str, returncode: int):

@@ -15,6 +15,70 @@ class LocalAIPlannerUnavailable(RuntimeError):
     """Raised when the local Ollama planner cannot be used."""
 
 
+class LocalAIPlannerOutputError(ValueError):
+    """Raised when local planner output cannot be parsed as a JSON object."""
+
+
+def _normalize_model_json(raw: str) -> str:
+    """Replace raw control characters only when they appear inside JSON strings."""
+    normalized = []
+    in_string = False
+    escaped = False
+
+    for character in raw:
+        if escaped:
+            normalized.append(character)
+            escaped = False
+            continue
+
+        if character == "\\":
+            normalized.append(character)
+            escaped = in_string
+            continue
+
+        if character == '"':
+            normalized.append(character)
+            in_string = not in_string
+            continue
+
+        if in_string and ord(character) < 0x20:
+            normalized.append(" ")
+            continue
+
+        normalized.append(character)
+
+    return "".join(normalized)
+
+
+def loads_model_json(raw: str) -> dict:
+    """Parse local model output after narrowly repairing JSON string controls."""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as initial_error:
+        normalized = _normalize_model_json(raw)
+        try:
+            parsed = json.loads(normalized)
+        except json.JSONDecodeError as repaired_error:
+            raise LocalAIPlannerOutputError(
+                "Invalid JSON output from local model: "
+                f"{repaired_error.msg} at line {repaired_error.lineno} "
+                f"column {repaired_error.colno}."
+            ) from repaired_error
+        if normalized == raw:
+            raise LocalAIPlannerOutputError(
+                "Invalid JSON output from local model: "
+                f"{initial_error.msg} at line {initial_error.lineno} "
+                f"column {initial_error.colno}."
+            ) from initial_error
+
+    if not isinstance(parsed, dict):
+        raise LocalAIPlannerOutputError(
+            "Invalid JSON output from local model: expected a JSON object."
+        )
+
+    return parsed
+
+
 def build_planner_prompt(user_instruction: str, parent_variant_id: str = "baseline") -> str:
     """Build the planner prompt without calling any model."""
     if not isinstance(user_instruction, str) or not user_instruction.strip():

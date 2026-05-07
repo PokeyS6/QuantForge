@@ -140,6 +140,32 @@ Variant backtesting will be available in a subsequent step.
     assert (variant_dir / "diff.md").exists()
 
 
+def test_modify_with_ai_repairs_raw_newline_inside_json_string(tmp_path, monkeypatch):
+    project_file = write_project(tmp_path)
+    raw_output = json.dumps(valid_momentum_spec()).replace(
+        "testable strategy variant",
+        "testable strategy\nvariant",
+    )
+    monkeypatch.setattr(
+        "quantforge.cli.generate_modification_spec",
+        lambda *args, **kwargs: raw_output,
+    )
+
+    result = runner.invoke(
+        app,
+        ["modify", str(project_file), "Add a momentum filter", "--ai"],
+    )
+
+    assert result.exit_code == 0
+    assert "Creating AI-assisted variant: variant_001_momentum_filter\n" in result.output
+    variant_dir = project_file.parent / "variants" / "variant_001_momentum_filter"
+    saved_spec = json.loads((variant_dir / "modification_spec.json").read_text())
+    assert (
+        saved_spec["non_advisory_note"]
+        == "This modification creates a testable strategy variant and does not constitute trading advice."
+    )
+
+
 def test_modify_with_ai_invalid_json_creates_no_variant_folder(tmp_path, monkeypatch):
     project_file = write_project(tmp_path)
     monkeypatch.setattr(
@@ -153,9 +179,34 @@ def test_modify_with_ai_invalid_json_creates_no_variant_folder(tmp_path, monkeyp
     )
 
     assert result.exit_code != 0
-    assert result.output == """ERROR: AI modification spec failed validation.
-No variant was created.
-"""
+    assert result.output.startswith(
+        "ERROR: AI modification spec failed validation: "
+        "Invalid JSON output from local model:"
+    )
+    assert result.output.endswith("""No variant was created.
+""")
+    assert "Expecting value at line 1 column 1." in result.output
+    assert ai_variant_dirs(project_file) == []
+
+
+def test_modify_with_ai_invalid_control_json_reports_parse_cause(
+    tmp_path,
+    monkeypatch,
+):
+    project_file = write_project(tmp_path)
+    monkeypatch.setattr(
+        "quantforge.cli.generate_modification_spec",
+        lambda *args, **kwargs: '{"supported": true, "note": "unterminated\n',
+    )
+
+    result = runner.invoke(
+        app,
+        ["modify", str(project_file), "Add a momentum filter", "--ai"],
+    )
+
+    assert result.exit_code != 0
+    assert "ERROR: AI modification spec failed validation: Invalid JSON output from local model:" in result.output
+    assert "No variant was created." in result.output
     assert ai_variant_dirs(project_file) == []
 
 
