@@ -95,7 +95,7 @@ def test_unknown_modification_type_fails():
 
     with pytest.raises(
         ModificationSpecValidationError,
-        match="Unsupported modification_type",
+        match="Unsupported modification type 'broker_execution'",
     ):
         validate_against_registry(spec)
 
@@ -110,7 +110,7 @@ def test_unknown_parameter_fails():
         },
     )
 
-    with pytest.raises(ModificationSpecValidationError, match="Unknown parameter"):
+    with pytest.raises(ModificationSpecValidationError, match="Unknown parameter 'extra'"):
         validate_against_registry(spec)
 
 
@@ -119,7 +119,7 @@ def test_missing_required_parameter_fails():
 
     with pytest.raises(
         ModificationSpecValidationError,
-        match="Missing required parameter: threshold",
+        match="Missing required parameter 'threshold'",
     ):
         validate_against_registry(spec)
 
@@ -143,7 +143,10 @@ def test_out_of_bounds_parameter_fails():
         {"lookback_days": 20, "threshold": 0.3},
     )
 
-    with pytest.raises(ModificationSpecValidationError, match="threshold must be <="):
+    with pytest.raises(
+        ModificationSpecValidationError,
+        match="Parameter 'threshold' is out of bounds",
+    ):
         validate_against_registry(spec)
 
 

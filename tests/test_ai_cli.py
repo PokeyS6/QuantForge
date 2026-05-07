@@ -225,7 +225,7 @@ def test_modify_with_ai_schema_failure_creates_no_variant_folder(tmp_path, monke
     )
 
     assert result.exit_code != 0
-    assert result.output == """ERROR: AI modification spec failed validation.
+    assert result.output == """ERROR: AI modification spec failed validation: Missing required field: schema_version
 No variant was created.
 """
     assert ai_variant_dirs(project_file) == []
@@ -256,10 +256,14 @@ Suggested supported requests:
     assert ai_variant_dirs(project_file) == []
 
 
-def test_modify_with_ai_registry_failure_creates_no_variant_folder(tmp_path, monkeypatch):
+def test_modify_with_ai_unsupported_modification_type_creates_no_variant_folder(
+    tmp_path,
+    monkeypatch,
+):
     project_file = write_project(tmp_path)
     spec = valid_momentum_spec()
-    spec["parameters"]["threshold"] = 0.5
+    spec["modification_type"] = "golden_cross"
+    spec["parameters"] = {}
     monkeypatch.setattr(
         "quantforge.cli.generate_modification_spec",
         lambda *args, **kwargs: json.dumps(spec),
@@ -271,7 +275,55 @@ def test_modify_with_ai_registry_failure_creates_no_variant_folder(tmp_path, mon
     )
 
     assert result.exit_code != 0
-    assert result.output == """ERROR: AI modification spec failed validation.
+    assert result.output == """ERROR: AI modification spec failed validation: Unsupported modification type 'golden_cross'
+No variant was created.
+"""
+    assert ai_variant_dirs(project_file) == []
+
+
+def test_modify_with_ai_missing_required_parameter_creates_no_variant_folder(
+    tmp_path,
+    monkeypatch,
+):
+    project_file = write_project(tmp_path)
+    spec = valid_momentum_spec()
+    del spec["parameters"]["threshold"]
+    monkeypatch.setattr(
+        "quantforge.cli.generate_modification_spec",
+        lambda *args, **kwargs: json.dumps(spec),
+    )
+
+    result = runner.invoke(
+        app,
+        ["modify", str(project_file), "Add a momentum filter", "--ai"],
+    )
+
+    assert result.exit_code != 0
+    assert result.output == """ERROR: AI modification spec failed validation: Missing required parameter 'threshold'
+No variant was created.
+"""
+    assert ai_variant_dirs(project_file) == []
+
+
+def test_modify_with_ai_out_of_bounds_parameter_creates_no_variant_folder(
+    tmp_path,
+    monkeypatch,
+):
+    project_file = write_project(tmp_path)
+    spec = valid_momentum_spec()
+    spec["parameters"]["lookback_days"] = 300
+    monkeypatch.setattr(
+        "quantforge.cli.generate_modification_spec",
+        lambda *args, **kwargs: json.dumps(spec),
+    )
+
+    result = runner.invoke(
+        app,
+        ["modify", str(project_file), "Add a momentum filter", "--ai"],
+    )
+
+    assert result.exit_code != 0
+    assert result.output == """ERROR: AI modification spec failed validation: Parameter 'lookback_days' is out of bounds (expected 5–100, got 300)
 No variant was created.
 """
     assert ai_variant_dirs(project_file) == []

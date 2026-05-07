@@ -12,7 +12,7 @@ def validate_against_registry(spec: dict) -> None:
     modification_type = spec["modification_type"]
     if modification_type not in REGISTRY:
         raise ModificationSpecValidationError(
-            f"Unsupported modification_type: {modification_type}"
+            f"Unsupported modification type '{modification_type}'"
         )
 
     registry_entry = REGISTRY[modification_type]
@@ -38,7 +38,7 @@ def _validate_parameters(
     unknown_parameters = set(parameters) - set(registry_parameters)
     if unknown_parameters:
         parameter = sorted(unknown_parameters)[0]
-        raise ModificationSpecValidationError(f"Unknown parameter: {parameter}")
+        raise ModificationSpecValidationError(f"Unknown parameter '{parameter}'")
 
     if modification_type == "rsi_threshold_adjustment" and not (
         "entry_rsi" in parameters or "exit_rsi" in parameters
@@ -52,7 +52,7 @@ def _validate_parameters(
             continue
         if parameter_name not in parameters:
             raise ModificationSpecValidationError(
-                f"Missing required parameter: {parameter_name}"
+                f"Missing required parameter '{parameter_name}'"
             )
 
         value = parameters[parameter_name]
@@ -87,9 +87,11 @@ def _validate_parameter_type(parameter_name: str, value, parameter_spec: dict) -
 def _validate_parameter_bounds(parameter_name: str, value, parameter_spec: dict) -> None:
     if "min" in parameter_spec and value < parameter_spec["min"]:
         raise ModificationSpecValidationError(
-            f"{parameter_name} must be >= {parameter_spec['min']}."
+            f"Parameter '{parameter_name}' is out of bounds "
+            f"(expected {parameter_spec['min']}–{parameter_spec['max']}, got {value})"
         )
     if "max" in parameter_spec and value > parameter_spec["max"]:
         raise ModificationSpecValidationError(
-            f"{parameter_name} must be <= {parameter_spec['max']}."
+            f"Parameter '{parameter_name}' is out of bounds "
+            f"(expected {parameter_spec['min']}–{parameter_spec['max']}, got {value})"
         )

@@ -222,7 +222,7 @@ def _modify_with_ai(project_file: Path, user_instruction: str) -> None:
     try:
         validate_schema(spec)
     except ModificationSpecValidationError as error:
-        _echo_ai_validation_failure()
+        _echo_ai_validation_failure(str(error))
         raise typer.Exit(code=1) from error
 
     if spec["supported"] is False:
@@ -236,7 +236,7 @@ def _modify_with_ai(project_file: Path, user_instruction: str) -> None:
     try:
         validate_against_registry(spec)
     except ModificationSpecValidationError as error:
-        _echo_ai_validation_failure()
+        _echo_ai_validation_failure(str(error))
         raise typer.Exit(code=1) from error
 
     try:
