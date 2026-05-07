@@ -38,7 +38,28 @@ artifacts. The AI does not generate executable strategy code.
 
 ```bash
 export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
-quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
+quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
+```
+
+Curated demo prompt:
+
+```text
+Add a momentum filter with a short lookback and low threshold
+```
+
+This prompt is used for demo consistency, not optimization. It is intended to
+create an AI-assisted `momentum_filter` variant that filters some RSI entries
+based on recent momentum confirmation. On the demo dataset, the created variant
+should visibly change trade count, exposure, and/or return/drawdown metrics
+relative to the baseline. Those changes describe historical behavior only; they
+are not a trading recommendation or a performance guarantee.
+
+After the variant is created, note the created variant id from the CLI output
+and run:
+
+```bash
+quantforge analyze strategy.qf.json --data-csv ../../real_data_csvs/spy_ohlcv.csv --variant-id <created_variant_id>
+quantforge compare strategy.qf.json --all-variants
 ```
 
 If Ollama or the selected model is unavailable, the AI planner should fail

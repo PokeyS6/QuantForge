@@ -51,7 +51,7 @@ The `--ai` workflow requires Ollama and a local model name:
 
 ```bash
 export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
-quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
+quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
 ```
 
 Pipeline:
@@ -64,7 +64,8 @@ If Ollama or the selected model is unavailable, the planner fails clearly and no
 AI-assisted variant is created. Non-AI workflows continue to work without
 Ollama.
 
-See [AI Ollama Setup](docs/ai_ollama_setup.md) for setup and validation steps.
+See [AI Ollama Setup](docs/ai_ollama_setup.md) for setup and
+[Demo Script](docs/demo_script.md) for the curated demo prompt.
 
 ## Real-Data Demo
 

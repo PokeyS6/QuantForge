@@ -39,8 +39,18 @@ The real-data runner does not require AI assistance. If you want to demonstrate
 
 ```bash
 export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
-quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
+quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
 ```
+
+For controlled demos, use this curated prompt for consistency:
+
+```text
+Add a momentum filter with a short lookback and low threshold
+```
+
+It is intended to create an AI-assisted momentum filter variant that changes
+historical participation metrics on the demo dataset. It is not an optimization
+request, trading recommendation, or performance guarantee.
 
 AI-assisted modification planning follows this local boundary:
 
