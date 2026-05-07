@@ -163,6 +163,47 @@ def test_run_and_persist_baseline_analysis_refuses_to_overwrite(baseline_project
         run_and_persist_baseline_analysis(project, data_csv, project_file)
 
 
+def test_run_and_persist_baseline_analysis_refuses_report_overwrite_and_preserves_file(
+    baseline_project,
+):
+    project_file, data_csv = baseline_project
+    project = read_project(project_file)
+    report_path = project_file.parent / "reports" / "baseline_report.md"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text("existing report\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Refusing to overwrite"):
+        run_and_persist_baseline_analysis(project, data_csv, project_file)
+
+    assert report_path.read_text(encoding="utf-8") == "existing report\n"
+
+
+def test_run_and_persist_baseline_analysis_cleans_up_after_replace_failure(
+    baseline_project,
+    monkeypatch,
+):
+    project_file, data_csv = baseline_project
+    project = read_project(project_file)
+
+    def failing_replace(temp_path, final_path):
+        temp_path.replace(final_path)
+        if final_path.name == "baseline_metrics.json":
+            raise OSError("simulated replace failure")
+
+    monkeypatch.setattr("quantforge.backtest.engine._replace_temp_file", failing_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        run_and_persist_baseline_analysis(project, data_csv, project_file)
+
+    project_root = project_file.parent
+    assert not (project_root / "reports" / "baseline_metrics.json").exists()
+    assert not (project_root / "reports" / "baseline_report.md").exists()
+    assert not (project_root / "variants" / "baseline" / "backtest_results.csv").exists()
+    assert not (project_root / "variants" / "baseline" / "signals.csv").exists()
+    assert not list((project_root / "reports").glob("*.tmp"))
+    assert not list((project_root / "variants" / "baseline").glob("*.tmp"))
+
+
 def test_run_and_persist_baseline_analysis_csv_outputs_have_expected_columns_and_no_nans(
     baseline_project,
 ):

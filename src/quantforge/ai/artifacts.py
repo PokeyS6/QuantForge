@@ -2,6 +2,7 @@
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 
@@ -24,8 +25,12 @@ def create_ai_variant_artifacts(project_file: Path, spec: dict) -> Path:
 
     variant_id = _next_variant_id(variants_dir, spec["modification_type"])
     variant_dir = variants_dir / variant_id
+    temp_variant_dir = variants_dir / f".{variant_id}.tmp"
+    project_temp_path = project_file.with_name(f".{project_file.name}.{variant_id}.tmp")
     if variant_dir.exists():
         raise ValueError(f"ERROR: Variant {variant_id} already exists. Refusing to overwrite.")
+    if temp_variant_dir.exists():
+        shutil.rmtree(temp_variant_dir)
 
     strategy_config = {
         "variant_id": variant_id,
@@ -46,29 +51,47 @@ def create_ai_variant_artifacts(project_file: Path, spec: dict) -> Path:
         "source": "local_ai_planner",
     }
 
-    variant_dir.mkdir(parents=True)
-    (variant_dir / "modification_spec.json").write_text(
-        json.dumps(spec, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    (variant_dir / "strategy_config.json").write_text(
-        json.dumps(strategy_config, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    (variant_dir / "change_summary.json").write_text(
-        json.dumps(change_summary, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    (variant_dir / "diff.md").write_text(
-        _diff_markdown(variant_id, spec),
-        encoding="utf-8",
-    )
+    updated_variants = list(variants)
+    updated_variants.append(variant_id)
+    updated_project = dict(project)
+    updated_project["variants"] = updated_variants
 
-    variants.append(variant_id)
-    project["variants"] = variants
-    project_file.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
+    try:
+        temp_variant_dir.mkdir(parents=True)
+        (temp_variant_dir / "modification_spec.json").write_text(
+            json.dumps(spec, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (temp_variant_dir / "strategy_config.json").write_text(
+            json.dumps(strategy_config, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (temp_variant_dir / "change_summary.json").write_text(
+            json.dumps(change_summary, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (temp_variant_dir / "diff.md").write_text(
+            _diff_markdown(variant_id, spec),
+            encoding="utf-8",
+        )
+        project_temp_path.write_text(
+            json.dumps(updated_project, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        _replace_path(temp_variant_dir, variant_dir)
+        _replace_path(project_temp_path, project_file)
+    except Exception:
+        shutil.rmtree(temp_variant_dir, ignore_errors=True)
+        shutil.rmtree(variant_dir, ignore_errors=True)
+        project_temp_path.unlink(missing_ok=True)
+        raise
 
     return variant_dir
+
+
+def _replace_path(source: Path, target: Path) -> None:
+    source.replace(target)
 
 
 def _next_variant_id(variants_dir: Path, modification_type: str) -> str:

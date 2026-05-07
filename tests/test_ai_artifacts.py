@@ -223,6 +223,52 @@ def test_variants_not_list_raises_and_creates_no_variant_folder(tmp_path):
     assert not (tmp_path / "variants" / "variant_001_momentum_filter").exists()
 
 
+def test_write_failure_creates_no_partial_ai_variant_folder(tmp_path, monkeypatch):
+    project_file = write_project(tmp_path)
+    original_project_text = project_file.read_text(encoding="utf-8")
+    write_baseline_results(tmp_path)
+    original_write_text = type(project_file).write_text
+
+    def failing_write_text(path, *args, **kwargs):
+        if path.name == "strategy_config.json":
+            raise OSError("simulated write failure")
+        return original_write_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(type(project_file), "write_text", failing_write_text)
+
+    with pytest.raises(OSError, match="simulated write failure"):
+        create_ai_variant_artifacts(project_file, valid_momentum_spec())
+
+    variants_dir = tmp_path / "variants"
+    assert not (variants_dir / "variant_001_momentum_filter").exists()
+    assert not (variants_dir / ".variant_001_momentum_filter.tmp").exists()
+    assert project_file.read_text(encoding="utf-8") == original_project_text
+
+
+def test_project_metadata_replace_failure_rolls_back_ai_variant_folder(
+    tmp_path,
+    monkeypatch,
+):
+    project_file = write_project(tmp_path)
+    original_project_text = project_file.read_text(encoding="utf-8")
+    write_baseline_results(tmp_path)
+
+    def failing_replace(source, target):
+        if target == project_file:
+            raise OSError("simulated metadata replace failure")
+        source.replace(target)
+
+    monkeypatch.setattr("quantforge.ai.artifacts._replace_path", failing_replace)
+
+    with pytest.raises(OSError, match="simulated metadata replace failure"):
+        create_ai_variant_artifacts(project_file, valid_momentum_spec())
+
+    variants_dir = tmp_path / "variants"
+    assert not (variants_dir / "variant_001_momentum_filter").exists()
+    assert not (variants_dir / ".variant_001_momentum_filter.tmp").exists()
+    assert project_file.read_text(encoding="utf-8") == original_project_text
+
+
 def test_artifacts_module_does_not_import_planner_validation_or_cli():
     module = sys.modules["quantforge.ai.artifacts"]
 

@@ -414,7 +414,8 @@ def test_compare_without_all_variants_errors(tmp_path):
 def test_compare_refuses_to_overwrite_existing_report(tmp_path):
     project_file = _write_project(tmp_path)
     project_root = _write_compare_inputs(project_file)
-    (project_root / "reports" / "comparison_report.md").write_text(
+    report_path = project_root / "reports" / "comparison_report.md"
+    report_path.write_text(
         "existing\n",
         encoding="utf-8",
     )
@@ -423,6 +424,7 @@ def test_compare_refuses_to_overwrite_existing_report(tmp_path):
 
     assert result.exit_code != 0
     assert result.output == "ERROR: Comparison report already exists. Refusing to overwrite.\n"
+    assert report_path.read_text(encoding="utf-8") == "existing\n"
 
 
 def test_compare_missing_baseline_metrics_error_is_surfaced(tmp_path):

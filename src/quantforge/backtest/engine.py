@@ -231,15 +231,13 @@ def run_and_persist_baseline_analysis(project: dict, data_csv: Path, project_fil
     report_path = reports_dir / "baseline_report.md"
     results_path = variants_dir / "backtest_results.csv"
     signals_path = variants_dir / "signals.csv"
+    final_output_paths = [metrics_path, report_path, results_path, signals_path]
 
-    if metrics_path.exists() or results_path.exists():
+    if any(path.exists() for path in final_output_paths):
         raise ValueError(
             "ERROR: Baseline results already exist. Refusing to overwrite. "
             "Delete existing results or use a new project."
         )
-
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    variants_dir.mkdir(parents=True, exist_ok=True)
 
     baseline = get_baseline_variant(project)
     parameters = baseline.get("parameters", {})
@@ -263,17 +261,13 @@ def run_and_persist_baseline_analysis(project: dict, data_csv: Path, project_fil
         "win_rate": summary["win_rate"],
     }
 
-    metrics_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
-
     results_output = results.rename_axis("date").reset_index()
     results_output = results_output[["date", "close", "position", "asset_return", "strategy_return", "equity"]]
     results_output = results_output.sort_values("date")
-    results_output.to_csv(results_path, index=False)
 
     signals_output = signals.rename_axis("date").reset_index()
     signals_output = signals_output[["date", "close", "rsi", "entry_signal", "exit_signal"]]
     signals_output = signals_output.sort_values("date").dropna()
-    signals_output.to_csv(signals_path, index=False)
 
     report = _baseline_report_markdown(
         ticker=parameters.get("ticker"),
@@ -282,6 +276,44 @@ def run_and_persist_baseline_analysis(project: dict, data_csv: Path, project_fil
         metrics=metrics,
         regime_analysis=regime_analysis,
     )
-    report_path.write_text(report, encoding="utf-8")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    variants_dir.mkdir(parents=True, exist_ok=True)
+    temp_paths = {
+        metrics_path: reports_dir / ".baseline_metrics.json.tmp",
+        report_path: reports_dir / ".baseline_report.md.tmp",
+        results_path: variants_dir / ".backtest_results.csv.tmp",
+        signals_path: variants_dir / ".signals.csv.tmp",
+    }
+    try:
+        temp_paths[metrics_path].write_text(
+            json.dumps(metrics, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        results_output.to_csv(temp_paths[results_path], index=False)
+        signals_output.to_csv(temp_paths[signals_path], index=False)
+        temp_paths[report_path].write_text(report, encoding="utf-8")
+
+        for final_path in [metrics_path, results_path, signals_path, report_path]:
+            _replace_temp_file(temp_paths[final_path], final_path)
+    except Exception:
+        _cleanup_failed_baseline_persistence(
+            temp_paths=list(temp_paths.values()),
+            final_output_paths=final_output_paths,
+        )
+        raise
 
     return metrics
+
+
+def _replace_temp_file(temp_path: Path, final_path: Path) -> None:
+    temp_path.replace(final_path)
+
+
+def _cleanup_failed_baseline_persistence(
+    temp_paths: list[Path],
+    final_output_paths: list[Path],
+) -> None:
+    for temp_path in temp_paths:
+        temp_path.unlink(missing_ok=True)
+    for final_path in final_output_paths:
+        final_path.unlink(missing_ok=True)
