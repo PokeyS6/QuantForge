@@ -62,4 +62,4 @@ auditable variant artifacts. This keeps assumptions, parameters, warnings, and
 diffs inspectable.
 
 AI-assisted changes are experiments on user-provided hypotheses. They are not
-trading advice, buy/sell recommendations, or performance guarantees.
+trading advice, directional trade instructions, or performance guarantees.

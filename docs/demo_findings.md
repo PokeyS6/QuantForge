@@ -8,7 +8,7 @@ The SPY real-data demo compares three historical analyses:
 
 ## Key Insight
 
-Filters reduce participation, not guaranteed risk.
+Filters reduce participation; they do not provide assured risk control.
 
 In the SPY demo, the variants changed trade count, exposure, drawdown, and total
 return relative to the baseline. Those changes describe behavior in the tested

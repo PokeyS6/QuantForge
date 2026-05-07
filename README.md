@@ -18,10 +18,10 @@ generate executable strategy code.
 QuantForge is not:
 
 - a financial advisor
-- a buy/sell signal service
+- a directional signal service
 - a trading bot
 - a broker execution tool
-- a guaranteed profit engine
+- a performance-guarantee engine
 - a tool that silently optimizes parameters
 - a tool that hides generated code or assumptions
 

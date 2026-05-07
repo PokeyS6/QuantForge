@@ -10,7 +10,7 @@ def test_analyze_with_csv_runs_baseline_summary(tmp_path):
         app,
         [
             "create",
-            "Buy when RSI < 30, sell when RSI > 70",
+            "RSI reversal when RSI crosses configured thresholds",
             "--ticker",
             "AAPL",
             "--start",
@@ -69,7 +69,7 @@ def test_analyze_with_csv_refuses_to_overwrite_existing_results(tmp_path):
         app,
         [
             "create",
-            "Buy when RSI < 30, sell when RSI > 70",
+            "RSI reversal when RSI crosses configured thresholds",
             "--ticker",
             "AAPL",
             "--start",

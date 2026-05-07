@@ -10,7 +10,7 @@ def test_analyze_project_reads_metadata(tmp_path):
         app,
         [
             "create",
-            "Buy when RSI < 30, sell when RSI > 70",
+            "RSI reversal when RSI crosses configured thresholds",
             "--ticker",
             "AAPL",
             "--start",

@@ -4,9 +4,9 @@ QuantForge is a local-first, CLI-first quantitative strategy evaluation
 workbench with optional ML-based filters. Users own the hypothesis. QuantForge
 helps test, modify, validate, compare, and audit user-provided strategy ideas.
 
-QuantForge does not provide trading advice. It does not make buy/sell
-recommendations, place live trades, connect to brokers for execution, promise
-profitable outcomes, or provide performance guarantees.
+QuantForge does not provide trading advice. It does not provide directional
+trade instructions, place live trades, connect to brokers for execution,
+promise positive outcomes, or provide performance guarantees.
 
 AI-assisted modification planning is local-first. QuantForge can use a local
 Ollama model to turn a user prompt into a validated JSON spec, but the AI does
@@ -16,7 +16,7 @@ create the auditable variant artifacts.
 ## Operating Principles
 
 - Users provide the strategy hypothesis and decide what to test.
-- QuantForge helps compare strategies; it does not tell users what to buy or sell.
+- QuantForge helps compare strategies; it does not tell users which market actions to take.
 - No trading advice is provided.
 - No performance guarantees are provided.
 - No live trading or broker execution is part of the product.
@@ -39,9 +39,9 @@ create the auditable variant artifacts.
 
 ## Unsafe Language Examples
 
-- "Buy AAPL now."
-- "This is the best strategy."
-- "Use these parameters to maximize profit."
+- "Enter an AAPL position now."
+- "This is the top strategy."
+- "Use these parameters to pursue a larger historical return."
 - "This signal predicts tomorrow's move."
-- "QuantForge recommends this trade."
-- "This variant is guaranteed to outperform."
+- "QuantForge selects this trade."
+- "This variant will always exceed the baseline."

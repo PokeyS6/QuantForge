@@ -63,7 +63,7 @@ def test_prompt_contains_unsupported_example():
     assert '"ai_planner_version": "local_llm_v1"' in prompt
     assert '"user_instruction": "Optimize this strategy for max returns"' in prompt
     assert (
-        '"reason": "Optimization requests are not supported because QuantForge does not silently search for best-performing parameters."'
+        '"reason": "Optimization requests are not supported because QuantForge does not silently search for highest-return parameter sets."'
         in prompt
     )
     assert '"Change RSI threshold"' in prompt
@@ -74,8 +74,8 @@ def test_prompt_contains_unsupported_categories():
 
     assert "- optimization" in prompt
     assert "- ranking strategies" in prompt
-    assert "- finding best parameters" in prompt
-    assert "- buy/sell recommendations" in prompt
+    assert "- finding highest-return parameter sets" in prompt
+    assert "- directional trade instructions" in prompt
     assert "- unsupported indicators" in prompt
     assert "- broker/live trading" in prompt
     assert "- multi-asset portfolio requests" in prompt

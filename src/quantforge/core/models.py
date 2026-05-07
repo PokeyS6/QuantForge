@@ -57,7 +57,7 @@ def new_rsi_project(strategy_prompt: str, ticker: str, start: str) -> StrategyPr
         assumptions=[
             "User owns the strategy hypothesis.",
             "QuantForge is persisting a test configuration, not recommending a trade.",
-            "No buy/sell recommendation is being made.",
+            "No entry or exit instruction is being made.",
         ],
         warnings=[
             "QuantForge is not a financial advisor.",

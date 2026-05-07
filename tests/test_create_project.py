@@ -12,7 +12,7 @@ def test_create_project_writes_metadata(tmp_path):
         app,
         [
             "create",
-            "Buy when RSI < 30, sell when RSI > 70",
+            "RSI reversal when RSI crosses configured thresholds",
             "--ticker",
             "AAPL",
             "--start",
