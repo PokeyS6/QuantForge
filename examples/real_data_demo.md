@@ -46,18 +46,22 @@ brew install ollama
 ollama serve
 ollama pull llama3
 export QUANTFORGE_LOCAL_LLM_MODEL=llama3
-quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
+quantforge modify strategy.qf.json --ai "Add a momentum filter using a 5 day lookback and -0.05 threshold"
 ```
 
 For controlled demos, use this curated prompt for consistency:
 
 ```text
-Add a momentum filter with a short lookback and low threshold
+Add a momentum filter using a 5 day lookback and -0.05 threshold
 ```
 
-It is intended to create an AI-assisted momentum filter variant that changes
+It is intended to create an AI-assisted momentum filter variant that can change
 historical participation metrics on the demo dataset. It is not an optimization
 request, trading recommendation, or performance guarantee.
+
+In validation trials on `real_data_csvs/spy_ohlcv.csv`, this prompt created
+`lookback_days=5` and `threshold=-0.05`, with completed trades changing from 9
+to 6 in the historical test.
 
 AI-assisted modification planning follows this local boundary:
 
@@ -82,5 +86,6 @@ compare:
 rm reports/comparison_report.md
 ```
 
-The AI momentum variant may produce 0 trades on the SPY demo CSV. This means the
-filter removed all entries; it does not mean the workflow failed.
+The AI momentum variant may produce 0 trades or unchanged metrics on the SPY
+demo CSV. This means the filter removed all entries or all persisted entries
+passed the filter; it does not mean the workflow failed.

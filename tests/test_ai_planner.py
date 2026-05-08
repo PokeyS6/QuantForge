@@ -244,6 +244,21 @@ variant and does not constitute trading advice."
     )
 
 
+def test_loads_model_json_removes_terminal_escape_sequences_inside_string():
+    raw = (
+        '{"schema_version": "0.1", "supported": true, '
+        '"user_instruction": "Add a momentum filter with a short lookback '
+        'and low \x1b[K threshold"}'
+    )
+
+    parsed = loads_model_json(raw)
+
+    assert (
+        parsed["user_instruction"]
+        == "Add a momentum filter with a short lookback and low  threshold"
+    )
+
+
 def test_loads_model_json_rejects_unrecoverable_json_with_clear_error():
     with pytest.raises(
         LocalAIPlannerOutputError,

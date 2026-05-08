@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 
 
@@ -21,6 +22,7 @@ class LocalAIPlannerOutputError(ValueError):
 
 def _normalize_model_json(raw: str) -> str:
     """Replace raw control characters only when they appear inside JSON strings."""
+    raw = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)
     normalized = []
     in_string = False
     escaped = False

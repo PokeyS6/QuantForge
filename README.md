@@ -51,7 +51,7 @@ The `--ai` workflow requires Ollama and a local model name:
 
 ```bash
 export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
-quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
+quantforge modify strategy.qf.json --ai "Add a momentum filter using a 5 day lookback and -0.05 threshold"
 ```
 
 Pipeline:

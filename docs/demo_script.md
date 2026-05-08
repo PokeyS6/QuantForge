@@ -77,21 +77,26 @@ brew install ollama
 ollama serve
 ollama pull llama3
 export QUANTFORGE_LOCAL_LLM_MODEL=llama3
-quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
+quantforge modify strategy.qf.json --ai "Add a momentum filter using a 5 day lookback and -0.05 threshold"
 ```
 
 Curated demo prompt:
 
 ```text
-Add a momentum filter with a short lookback and low threshold
+Add a momentum filter using a 5 day lookback and -0.05 threshold
 ```
 
 This prompt is used for demo consistency, not optimization. It is intended to
-create an AI-assisted `momentum_filter` variant that filters some RSI entries
+create an AI-assisted `momentum_filter` variant that can filter RSI entries
 based on recent momentum confirmation. On the demo dataset, the created variant
-should visibly change trade count, exposure, and/or return/drawdown metrics
-relative to the baseline. Those changes describe historical behavior only; they
-are not a trading recommendation or a performance guarantee.
+may change trade count, exposure, and/or return/drawdown metrics relative to the
+baseline. Those changes describe historical behavior only; they are not a
+trading recommendation or a performance guarantee.
+
+In validation trials on `real_data_csvs/spy_ohlcv.csv`, this prompt created a
+momentum filter with `lookback_days=5` and `threshold=-0.05`. The historical
+test changed completed trades from 9 to 6 and changed exposure and
+return/drawdown metrics relative to the baseline.
 
 After the variant is created, note the created variant id from the CLI output
 and run:
@@ -109,8 +114,9 @@ comparison report:
 rm reports/comparison_report.md
 ```
 
-The AI momentum variant may produce 0 trades on the SPY demo CSV. This means the
-filter removed all entries; it does not mean the workflow failed.
+The AI momentum variant may produce 0 trades or unchanged metrics on the SPY
+demo CSV. This means the filter removed all entries or all persisted entries
+passed the filter; it does not mean the workflow failed.
 
 If Ollama or the selected model is unavailable, the AI planner should fail
 clearly. Non-AI commands and hardcoded modification workflows should still work.
