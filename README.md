@@ -81,6 +81,9 @@ If Yahoo/yfinance rate-limits the request, provide a local CSV:
 python scripts/run_real_data_demo.py --ticker SPY --start 2018-01-01 --data-csv path/to/spy_ohlcv.csv
 ```
 
+For manual E2E validation, use `real_data_csvs/spy_ohlcv.csv`. It contains the
+required OHLCV columns and enough rows for baseline and variant tests.
+
 The runner creates a project, analyzes the baseline, creates and analyzes the
 volatility and ML variants, runs comparison, and writes
 `real_data_demo_report.md` under the output directory.

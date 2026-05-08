@@ -16,6 +16,42 @@ If yfinance/Yahoo Finance rate-limits the request, use a local OHLCV CSV:
 python scripts/run_real_data_demo.py --ticker SPY --start 2018-01-01 --data-csv path/to/spy_ohlcv.csv
 ```
 
+## Manual E2E Path
+
+The intended demo CSV is:
+
+```text
+real_data_csvs/spy_ohlcv.csv
+```
+
+It contains the required OHLCV columns (`date`, `open`, `high`, `low`, `close`,
+`volume`) and enough rows for baseline and variant tests.
+
+Create the demo project with:
+
+```bash
+quantforge create "SPY RSI reversal" --ticker SPY --start 2020-01-01
+```
+
+This creates:
+
+```text
+spy-rsi-reversal
+```
+
+Outside-project path style:
+
+```bash
+quantforge analyze spy-rsi-reversal/strategy.qf.json --data-csv real_data_csvs/spy_ohlcv.csv
+```
+
+Inside-project path style:
+
+```bash
+cd spy-rsi-reversal
+quantforge analyze strategy.qf.json --data-csv ../../real_data_csvs/spy_ohlcv.csv
+```
+
 ## Narrative
 
 The demo compares three historical analyses:
@@ -37,7 +73,10 @@ JSON spec, and then uses deterministic builders to create auditable variant
 artifacts. The AI does not generate executable strategy code.
 
 ```bash
-export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
+brew install ollama
+ollama serve
+ollama pull llama3
+export QUANTFORGE_LOCAL_LLM_MODEL=llama3
 quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
 ```
 
@@ -62,8 +101,24 @@ quantforge analyze strategy.qf.json --data-csv ../../real_data_csvs/spy_ohlcv.cs
 quantforge compare strategy.qf.json --all-variants
 ```
 
+If `reports/comparison_report.md` already exists, compare refuses to overwrite
+it. Before rerunning compare from inside `spy-rsi-reversal`, remove the existing
+comparison report:
+
+```bash
+rm reports/comparison_report.md
+```
+
+The AI momentum variant may produce 0 trades on the SPY demo CSV. This means the
+filter removed all entries; it does not mean the workflow failed.
+
 If Ollama or the selected model is unavailable, the AI planner should fail
 clearly. Non-AI commands and hardcoded modification workflows should still work.
+The expected missing-model message is:
+
+```text
+ERROR: Local AI planner unavailable. Configure a local model before using AI-assisted modifications.
+```
 
 See [AI Ollama Setup](ai_ollama_setup.md).
 

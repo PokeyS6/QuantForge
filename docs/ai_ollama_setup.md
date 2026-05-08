@@ -14,29 +14,40 @@ trades or optimize strategies.
 
 ## Setup
 
-1. Install Ollama from the official Ollama distribution for your system.
-2. Pull a local model:
+1. Install Ollama:
 
 ```bash
-ollama pull <model-name>
+brew install ollama
 ```
 
-3. Make sure Ollama is running:
+2. Start Ollama:
+
+```bash
+ollama serve
+```
+
+3. Pull the demo model:
+
+```bash
+ollama pull llama3
+```
+
+4. Make sure Ollama is running:
 
 ```bash
 ollama list
 ```
 
-4. Set the model name for QuantForge:
+5. Set the model name for QuantForge:
 
 ```bash
-export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
+export QUANTFORGE_LOCAL_LLM_MODEL=llama3
 ```
 
-5. Run an AI-assisted modification:
+6. Run the curated demo modification:
 
 ```bash
-quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
+quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
 ```
 
 ## Expected Failures
@@ -44,6 +55,12 @@ quantforge modify strategy.qf.json --ai "add a momentum confirmation filter"
 If Ollama is not running, the model is unavailable, or
 `QUANTFORGE_LOCAL_LLM_MODEL` is not set, the planner should fail clearly and no
 AI-assisted variant should be created.
+
+Expected missing-model message:
+
+```text
+ERROR: Local AI planner unavailable. Configure a local model before using AI-assisted modifications.
+```
 
 Non-AI workflows still work without Ollama:
 

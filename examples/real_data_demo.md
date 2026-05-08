@@ -29,6 +29,10 @@ The script writes all generated data, project artifacts, variant analyses, compa
 output, and `real_data_demo_report.md` under the selected output directory. The
 output directory is safe to delete after inspection.
 
+For manual E2E validation, the intended demo CSV is
+`real_data_csvs/spy_ohlcv.csv`. It has the required OHLCV columns and enough
+rows for baseline and variant tests.
+
 This runner is demo/validation tooling. It uses historical data for research and
 does not provide financial advice or trading recommendations.
 
@@ -38,7 +42,10 @@ The real-data runner does not require AI assistance. If you want to demonstrate
 `quantforge modify --ai`, configure a local Ollama model first:
 
 ```bash
-export QUANTFORGE_LOCAL_LLM_MODEL=<model-name>
+brew install ollama
+ollama serve
+ollama pull llama3
+export QUANTFORGE_LOCAL_LLM_MODEL=llama3
 quantforge modify strategy.qf.json --ai "Add a momentum filter with a short lookback and low threshold"
 ```
 
@@ -61,3 +68,19 @@ user prompt -> local LLM -> validated JSON spec -> deterministic builder -> audi
 If Ollama or the model is unavailable, the AI planner should fail clearly.
 Non-AI workflows should still work. The AI does not generate executable strategy
 code, recommend trades, or optimize strategies.
+
+Expected missing-model message:
+
+```text
+ERROR: Local AI planner unavailable. Configure a local model before using AI-assisted modifications.
+```
+
+If `reports/comparison_report.md` already exists, remove it before rerunning
+compare:
+
+```bash
+rm reports/comparison_report.md
+```
+
+The AI momentum variant may produce 0 trades on the SPY demo CSV. This means the
+filter removed all entries; it does not mean the workflow failed.
